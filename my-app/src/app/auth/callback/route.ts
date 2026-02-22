@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 function safeNextPath(nextValue: string | null) {
@@ -14,10 +13,6 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const nextPath = safeNextPath(requestUrl.searchParams.get("next"));
-
-  if (env.disableAuthForDemo) {
-    return NextResponse.redirect(new URL(nextPath, requestUrl.origin));
-  }
 
   if (!code) {
     const signinUrl = new URL("/signin", requestUrl.origin);
