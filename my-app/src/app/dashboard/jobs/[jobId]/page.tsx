@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { JobActionPanel } from "@/components/job-action-panel";
-import { GlassCard } from "@/components/ui/glass-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { requireUser } from "@/lib/auth";
 import { getJobPresentationData } from "@/lib/medivance/db";
@@ -133,264 +132,240 @@ export default async function JobDetailsPage({
         .maybeSingle()
     : { data: null };
 
-  return (
-    <AppShell userLabel={String(user.user_metadata.full_name ?? user.email ?? "Pharmacist")}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link href="/dashboard" className="pill-btn pill-btn-secondary">
-          Back to Queue
-        </Link>
-        <StatusPill status={context.job.status} />
-      </div>
+  const displayName = user.user_metadata.full_name ?? user.email ?? "Pharmacist";
 
+  return (
+    <AppShell userLabel={String(displayName)}>
+      
       {toastMessage ? (
-        <div
-          className={
-            toastMessage.tone === "danger"
-              ? "rounded-2xl border border-rose-200 bg-rose-100/80 px-4 py-3 text-sm text-rose-700"
-              : "rounded-2xl border border-slate-200 bg-white/55 px-4 py-3 text-sm text-slate-700"
-          }
-        >
+        <div className={`rounded-xl border px-4 py-3 text-sm shadow-sm flex items-center gap-3 ${toastMessage.tone === "danger" ? "border-red-200 bg-red-50 text-red-700 " : "border-slate-200 bg-white text-slate-700 "}`}>
+          <span className="material-symbols-outlined">{toastMessage.tone === "danger" ? "error" : "info"}</span>
           {toastMessage.text}
         </div>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <GlassCard className="space-y-4">
-          <p className="text-xs font-semibold tracking-[0.14em] text-slate-600 uppercase">
-            Job Summary
-          </p>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            {context.prescription.medicationName}
-          </h1>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/60 bg-white/25 p-4">
-              <p className="summary-label">Patient</p>
-              <p className="summary-value">{context.patient.fullName}</p>
-              <p className="summary-sub">
-                Weight {context.patient.weightKg} kg • Allergies{" "}
-                {context.patient.allergies.length
-                  ? context.patient.allergies.join(", ")
-                  : "None listed"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/60 bg-white/25 p-4">
-              <p className="summary-label">Prescription</p>
-              <p className="summary-value">
-                {context.prescription.doseMgPerKg} mg/kg • {context.prescription.frequencyPerDay}x/day
-              </p>
-              <p className="summary-sub">
-                {context.prescription.strengthMgPerMl} mg/mL •{" "}
-                {context.prescription.dispenseVolumeMl} mL
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/60 bg-white/25 p-4 sm:col-span-2">
-              <p className="summary-label">Resolved Formula</p>
-              <p className="summary-value">
-                {formulaData?.name ?? "Unresolved"}{" "}
-                {formulaData?.source ? `(${formatStatus(formulaData.source)})` : ""}
-              </p>
-              <p className="summary-sub">{formulaData?.instructions ?? "Run pipeline to resolve formula."}</p>
-            </div>
+      {/* Job Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+              Job #{jobId.split("-")[0].toUpperCase()}
+            </h1>
+            <StatusPill status={context.job.status} />
           </div>
-
-          <p className="text-xs text-slate-600">
-            Due {dateTime.format(new Date(context.prescription.dueAt))}
+          <p className="text-slate-500 text-sm">
+            Due {dateTime.format(new Date(context.prescription.dueAt))} • {context.prescription.medicationName}
           </p>
-        </GlassCard>
+        </div>
+        <div className="flex gap-3">
+          <Link href="/dashboard" className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 :bg-slate-700 text-sm font-medium transition-colors shadow-sm">
+            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+            Back to Queue
+          </Link>
+        </div>
+      </div>
 
-        <JobActionPanel
-          jobId={jobId}
-          jobStatus={context.job.status}
-        />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-        <GlassCard className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Latest Verification Snapshot</h2>
-            <p className="text-xs text-slate-600">
-              {latestReport ? `v${latestReport.version}` : "No report"}
-            </p>
-          </div>
-
-          {latestReport ? (
-            <>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/60 bg-white/25 p-3">
-                  <p className="summary-label">Single Dose</p>
-                  <p className="summary-value">
-                    {String(latestValues.singleDoseMg ?? "--")} mg
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full items-start">
+        
+        {/* Left Column: Context (3 cols) */}
+        <div className="lg:col-span-3 flex flex-col gap-6">
+          
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 ">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[var(--color-primary)] text-[20px]">person</span>
+                Patient Context
+              </h3>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <div className="size-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg">
+                  {context.patient.fullName.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 text-lg">{context.patient.fullName}</p>
+                  <p className="text-xs text-slate-500 ">MRN: {context.patient.id.slice(0, 6)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-y-3 text-sm border-t border-slate-100 pt-3">
+                <div>
+                  <p className="text-slate-500 text-xs mb-0.5">Weight</p>
+                  <p className="font-medium text-slate-900 ">{context.patient.weightKg} kg</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs mb-0.5">Allergies</p>
+                  <p className="font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded inline-block text-xs">
+                    {context.patient.allergies.length ? context.patient.allergies.join(", ") : "None"}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/60 bg-white/25 p-3">
-                  <p className="summary-label">Daily Dose</p>
-                  <p className="summary-value">{String(latestValues.dailyDoseMg ?? "--")} mg</p>
-                </div>
-                <div className="rounded-2xl border border-white/60 bg-white/25 p-3">
-                  <p className="summary-label">BUD</p>
-                  <p className="summary-value">{String(latestValues.budDateIso ?? "--")}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 ">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[var(--color-primary)] text-[20px]">prescriptions</span>
+                Rx Details
+              </h3>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Drug</p>
+                <p className="text-lg font-bold text-[var(--color-primary)]">{context.prescription.medicationName}</p>
+              </div>
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Dosing / Freq</p>
+                <p className="text-sm font-medium text-slate-900 ">{context.prescription.doseMgPerKg} mg/kg • {context.prescription.frequencyPerDay}x/day</p>
+              </div>
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Formula</p>
+                <p className="text-sm font-medium text-slate-900 mb-2">
+                  {formulaData?.name ?? "Unresolved"} {formulaData?.source ? `(${formatStatus(formulaData.source)})` : ""}
+                </p>
+                <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed font-mono">
+                  {formulaData?.instructions ?? "Run pipeline to resolve formula."}
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div className="grid gap-2">
-                {hardChecks.map((check) => (
-                  <div key={check.key} className="check-row">
-                    <p className="text-sm font-semibold text-slate-800">{formatStatus(check.key)}</p>
-                    <p className="text-xs text-slate-700">{check.detail}</p>
-                    <span
-                      className={
-                        check.status === "PASS"
-                          ? "check-pass"
-                          : check.status === "FAIL"
-                            ? "check-fail"
-                            : "check-warn"
-                      }
-                    >
-                      {check.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        </div>
 
-              <div className="space-y-2">
-                <p className="summary-label">AI + External Review</p>
-                <div className="grid gap-2">
-                  {aiReview.checks.map((check) => (
-                    <div key={check.key} className="check-row">
-                      <p className="text-sm font-semibold text-slate-800">{formatStatus(check.key)}</p>
-                      <p className="text-xs text-slate-700">{check.detail}</p>
-                      <span
-                        className={
-                          check.status === "PASS"
-                            ? "check-pass"
-                            : check.status === "FAIL"
-                              ? "check-fail"
-                              : "check-warn"
-                        }
-                      >
+        {/* Center Column: Verification & Analysis (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+
+          <div className="bg-gradient-to-r from-[rgba(19,127,236,0.05)] to-transparent border-l-4 border-[var(--color-primary)] rounded-r-xl p-4 flex gap-4 items-start shadow-sm bg-white ">
+            <div className="bg-[rgba(19,127,236,0.1)] p-2 rounded-lg text-[var(--color-primary)]">
+              <span className="material-symbols-outlined">auto_awesome</span>
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-slate-900 mb-1">AI Workflow Analysis</h4>
+              <p className="font-mono text-xs text-slate-600 leading-relaxed bg-slate-100 p-2 rounded border border-slate-200 ">
+                {latestReport ? (
+                  <>
+                    &gt; RUN: Pipeline completed.<br/>
+                    &gt; V: {latestReport.version}<br/>
+                    &gt; DOSE: {String(latestValues.singleDoseMg ?? "--")} mg (Daily: {String(latestValues.dailyDoseMg ?? "--")} mg)<br/>
+                    &gt; BUD: {String(latestValues.budDateIso ?? "--")}
+                  </>
+                ) : (
+                  "Waiting for pipeline run..."
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 ">
+              <h3 className="font-semibold text-slate-900 ">Verification Snapshot</h3>
+              <span className="text-xs font-medium text-slate-500 ">
+                {latestReport ? `v${latestReport.version}` : "No report"}
+              </span>
+            </div>
+            
+            <div className="divide-y divide-slate-100 ">
+              {hardChecks.length > 0 || aiReview.checks.length > 0 ? (
+                <>
+                  {[...hardChecks, ...aiReview.checks].map((check, i) => (
+                    <div key={i} className={`p-4 flex items-center justify-between transition-colors ${check.status === "PASS" ? "hover:bg-slate-50 :bg-slate-800/30" : check.status === "FAIL" ? "bg-red-50/50 border-l-4 border-l-red-500" : "bg-amber-50/50 border-l-4 border-l-amber-400"}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-1.5 rounded-full ${check.status === "PASS" ? "bg-green-100 text-green-600 " : check.status === "FAIL" ? "bg-red-100 text-red-600 " : "bg-amber-100 text-amber-600 "}`}>
+                          <span className="material-symbols-outlined text-lg">
+                            {check.status === "PASS" ? "check" : check.status === "FAIL" ? "error" : "warning"}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 ">{formatStatus(check.key)}</p>
+                          <p className="text-xs text-slate-500 ">{check.detail}</p>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-1 rounded ${check.status === "PASS" ? "bg-green-100 text-green-700 " : check.status === "FAIL" ? "bg-red-100 text-red-700 " : "bg-amber-100 text-amber-700 "}`}>
                         {check.status}
                       </span>
                     </div>
                   ))}
+                </>
+              ) : (
+                <div className="p-6 text-center text-sm text-slate-500">Run pipeline to populate checks.</div>
+              )}
+            </div>
+
+            {aiReview.citations.length > 0 && (
+              <div className="bg-slate-50 p-4 border-t border-slate-100 ">
+                <p className="text-xs font-semibold text-slate-500 mb-3">EXTERNAL CITATIONS</p>
+                <div className="space-y-3">
+                  {aiReview.citations.map((citation, i) => (
+                    <a key={i} href={citation.url} target="_blank" rel="noreferrer" className="block p-3 bg-white rounded border border-slate-200 hover:border-blue-300 transition-colors">
+                      <p className="text-sm font-semibold text-[var(--color-primary)]">{citation.title}</p>
+                      <p className="text-xs text-slate-500 mt-1">{citation.detail || citation.source}</p>
+                    </a>
+                  ))}
                 </div>
               </div>
+            )}
+          </div>
 
-              <div className="space-y-2">
-                <p className="summary-label">External References</p>
-                {aiReview.citations.length ? (
-                  <div className="grid gap-2">
-                    {aiReview.citations.map((citation) => (
-                      <a
-                        key={`${citation.source}:${citation.url}`}
-                        href={citation.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="timeline-row block"
-                      >
-                        <p className="text-sm font-semibold text-slate-800">{citation.title}</p>
-                        <p className="text-xs text-slate-600">{formatStatus(citation.source)}</p>
-                        {citation.detail ? (
-                          <p className="text-xs text-slate-700">{citation.detail}</p>
-                        ) : null}
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-700">
-                    No external citations attached for this run.
-                  </p>
-                )}
-                {aiReview.externalWarnings.length ? (
-                  <p className="text-xs text-amber-800">
-                    {aiReview.externalWarnings.join(" ")}
-                  </p>
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-slate-700">
-              No report generated yet. Run pipeline to create deterministic calculations and hard safety checks.
-            </p>
-          )}
-        </GlassCard>
-
-        <GlassCard className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-800">Final Output</h2>
-          {finalOutput ? (
-            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/30 p-4">
-              <p className="text-sm text-slate-700">
-                Approved {dateTime.format(new Date(finalOutput.approvedAt))}
-              </p>
-              <p className="text-xs text-slate-700">
-                Signed by {finalOutput.signerName} ({finalOutput.signerEmail}) •{" "}
-                {formatStatus(finalOutput.signatureMeaning)}
-              </p>
-              <p className="text-xs text-slate-600">
-                Signature hash: <span className="font-mono">{finalOutput.signatureHash.slice(0, 16)}...</span>
-              </p>
-              <p className="summary-label">Label Preview</p>
-              <pre className="json-preview">{JSON.stringify(finalOutput.labelPayload, null, 2)}</pre>
+          <div className="relative group bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-hidden">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-slate-900 text-sm uppercase tracking-wide">Final Label Preview</h3>
+              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">
+                {finalOutput ? "Final" : "Draft"}
+              </span>
             </div>
-          ) : (
-            <p className="text-sm text-slate-700">
-              No final output yet. Approve the verified job to generate locked report + label payload.
-            </p>
-          )}
-        </GlassCard>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-3">
-        <GlassCard className="space-y-3 xl:col-span-1">
-          <h3 className="text-base font-semibold text-slate-800">Report History</h3>
-          <div className="space-y-2">
-            {reports.map((report) => (
-              <div key={report.id} className="timeline-row">
-                <p className="text-sm font-semibold text-slate-800">
-                  v{report.version} • {formatStatus(report.overallStatus)}
-                </p>
-                <p className="text-xs text-slate-600">
-                  {dateTime.format(new Date(report.createdAt))}
-                </p>
+            {finalOutput ? (
+              <div className="relative bg-white border-2 border-slate-300 border-dashed rounded-lg p-4 font-mono text-xs text-black shadow-sm mx-auto max-w-md select-none transition-opacity">
+                <div className="mb-2 border-b border-black pb-2 space-y-1">
+                  <p className="font-bold">Approved {dateTime.format(new Date(finalOutput.approvedAt))}</p>
+                  <p>Signed by {finalOutput.signerName} ({finalOutput.signerEmail})</p>
+                  <p>Hash: {finalOutput.signatureHash.slice(0, 16)}...</p>
+                </div>
+                <pre className="text-[10px] overflow-x-auto whitespace-pre-wrap">{JSON.stringify(finalOutput.labelPayload, null, 2)}</pre>
               </div>
-            ))}
-            {!reports.length ? <p className="text-sm text-slate-600">No reports yet.</p> : null}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="space-y-3 xl:col-span-1">
-          <h3 className="text-base font-semibold text-slate-800">Pharmacist Feedback</h3>
-          <div className="space-y-2">
-            {feedback.map((item) => (
-              <div key={item.id} className="timeline-row">
-                <p className="text-sm font-semibold text-slate-800">
-                  {formatStatus(item.decision)}
-                </p>
-                <p className="text-xs text-slate-700">{item.feedback}</p>
-                <p className="text-xs text-slate-600">
-                  {dateTime.format(new Date(item.createdAt))}
-                </p>
+            ) : (
+              <div className="relative bg-white border-2 border-slate-300 border-dashed rounded-lg p-6 text-center shadow-sm mx-auto max-w-md select-none opacity-80">
+                <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">qr_code_2</span>
+                <p className="text-sm text-slate-500 font-medium">No final output yet. Approve job to generate label.</p>
               </div>
-            ))}
-            {!feedback.length ? <p className="text-sm text-slate-600">No pharmacist notes yet.</p> : null}
+            )}
           </div>
-        </GlassCard>
 
-        <GlassCard className="space-y-3 xl:col-span-1">
-          <h3 className="text-base font-semibold text-slate-800">Audit Trail</h3>
-          <div className="space-y-2">
-            {audit.map((event) => (
-              <div key={event.id} className="timeline-row">
-                <p className="text-sm font-semibold text-slate-800">{event.eventType}</p>
-                <p className="text-xs text-slate-600">
-                  {dateTime.format(new Date(event.createdAt))}
-                </p>
+        </div>
+
+        {/* Right Column: Actions & Workflow (4 cols) */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          <JobActionPanel
+            jobId={jobId}
+            jobStatus={context.job.status}
+          />
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-[400px]">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 ">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[var(--color-primary)] text-[20px]">history</span>
+                Audit Trail
+              </h3>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
+              <div className="relative pl-4 border-l-2 border-slate-200 space-y-6">
+                
+                {audit.length > 0 ? audit.map((event, i) => (
+                  <div key={event.id} className="relative">
+                    <div className="absolute -left-[21px] bg-white border-2 border-[var(--color-primary)] rounded-full p-0.5">
+                      <div className="size-2 bg-[var(--color-primary)] rounded-full"></div>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-0.5">{dateTime.format(new Date(event.createdAt))}</p>
+                    <p className="text-sm font-bold text-slate-900 ">{event.eventType}</p>
+                  </div>
+                )) : (
+                  <p className="text-sm text-slate-500 ml-2">No audit events yet.</p>
+                )}
+
               </div>
-            ))}
-            {!audit.length ? <p className="text-sm text-slate-600">No events yet.</p> : null}
+            </div>
           </div>
-        </GlassCard>
-      </section>
+        </div>
+      </div>
     </AppShell>
   );
 }

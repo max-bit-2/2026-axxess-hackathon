@@ -1,40 +1,23 @@
-import { cn } from "@/lib/cn";
-import type { JobStatus } from "@/lib/medivance/types";
+export function StatusPill({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
 
-const statusStyle: Record<JobStatus, string> = {
-  queued: "bg-white/40 text-slate-700 border-slate-300/80",
-  in_progress: "bg-sky-100/80 text-sky-800 border-sky-300/80",
-  needs_review: "bg-amber-100/90 text-amber-800 border-amber-300/90",
-  verified: "bg-emerald-100/85 text-emerald-800 border-emerald-300/80",
-  approved: "bg-cyan-100/85 text-cyan-800 border-cyan-300/80",
-  rejected: "bg-rose-100/85 text-rose-800 border-rose-300/80",
-};
+  let styles = "bg-slate-100 text-slate-800 border-slate-200 ";
+  
+  if (normalized.includes("verify") || normalized.includes("review") || normalized.includes("escalated") || normalized === "needs_review") {
+    styles = "bg-orange-100 text-orange-800 border-orange-200 ";
+  } else if (normalized.includes("progress") || normalized === "running" || normalized === "started") {
+    styles = "bg-purple-100 text-purple-800 border-purple-200 ";
+  } else if (normalized.includes("pass") || normalized.includes("approve") || normalized === "verified") {
+    styles = "bg-green-100 text-green-800 border-green-200 ";
+  } else if (normalized.includes("fail") || normalized.includes("reject") || normalized === "rejected") {
+    styles = "bg-red-100 text-red-800 border-red-200 ";
+  } else if (normalized.includes("pend") || normalized === "pending") {
+    styles = "bg-blue-100 text-blue-800 border-blue-200 ";
+  }
 
-const statusLabel: Record<JobStatus, string> = {
-  queued: "Queued",
-  in_progress: "In Progress",
-  needs_review: "Needs Review",
-  verified: "Verified",
-  approved: "Approved",
-  rejected: "Rejected",
-};
-
-export function StatusPill({
-  status,
-  className,
-}: {
-  status: JobStatus;
-  className?: string;
-}) {
   return (
-    <span
-      className={cn(
-        "inline-flex rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.08em] uppercase",
-        statusStyle[status],
-        className,
-      )}
-    >
-      {statusLabel[status]}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles}`}>
+      {status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
     </span>
   );
 }
