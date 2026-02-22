@@ -2,6 +2,7 @@ import {
   buildMissingExternalClinicalSafetySnapshot,
   evaluateExternalClinicalChecks,
 } from "./external-safety";
+import { env } from "../env";
 import type {
   CalculationResult,
   ExternalClinicalSafetySnapshot,
@@ -28,6 +29,28 @@ function toMg(quantity: number, unit: string) {
   if (unit === "mg") return quantity;
   if (unit === "g") return quantity * MG_PER_G;
   return quantity;
+}
+
+function getLowStockWarningMultiplier(
+  formulaSafety: FormulaSafetyProfile,
+  ingredientName: string,
+) {
+  const perIngredient = formulaSafety.lowStockWarningMultiplierByIngredient ?? {};
+  const normalizedIngredientName = normalize(ingredientName);
+  const matchedEntry = Object.entries(perIngredient).find(
+    ([key]) => normalize(key) === normalizedIngredientName,
+  );
+  const byIngredient = matchedEntry?.[1];
+
+  const configured =
+    byIngredient ??
+    formulaSafety.lowStockWarningMultiplier ??
+    env.lowStockWarningMultiplier;
+
+  if (!Number.isFinite(configured) || configured <= 1) {
+    return 1.25;
+  }
+  return configured;
 }
 
 export function runHardChecks(params: {
@@ -117,6 +140,11 @@ export function runHardChecks(params: {
       continue;
     }
 
+    const warningThresholdMultiplier = getLowStockWarningMultiplier(
+      formulaSafety,
+      requirement.displayName,
+    );
+
     if (requirement.unit === "mL") {
       const totalAvailableMl = lots
         .filter((lot) => lot.unit === "mL")
@@ -124,7 +152,7 @@ export function runHardChecks(params: {
 
       if (totalAvailableMl < requirement.quantity) {
         inventoryShortages += 1;
-      } else if (totalAvailableMl < requirement.quantity * 1.25) {
+      } else if (totalAvailableMl < requirement.quantity * warningThresholdMultiplier) {
         lowStockIngredients.push(requirement.displayName);
       }
       continue;
@@ -137,7 +165,7 @@ export function runHardChecks(params: {
 
     if (totalAvailableMg < requiredMg) {
       inventoryShortages += 1;
-    } else if (totalAvailableMg < requiredMg * 1.25) {
+    } else if (totalAvailableMg < requiredMg * warningThresholdMultiplier) {
       lowStockIngredients.push(requirement.displayName);
     }
   }

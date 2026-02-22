@@ -43,6 +43,8 @@ cp .env.example .env.local
 ```
 
 3. Update `.env.local` values.
+   - `MEDIVANCE_QUEUE_TIMEZONE` controls what counts as "today" in the queue.
+   - `MEDIVANCE_LOW_STOCK_WARNING_MULTIPLIER` controls low-stock warning sensitivity.
 
 4. In Supabase Dashboard:
 - `Auth` -> `Providers` -> enable `Google`

@@ -33,6 +33,9 @@ Scope: Pharmaceutical Compounding AI System requirements from the architecture d
 
 ## P1 (High Value / Operational Risk Reduction)
 
+- [x] Queue "today" filtering aligned to configurable operational timezone.
+  - Uses `MEDIVANCE_QUEUE_TIMEZONE` for day-boundary filtering in queue retrieval.
+  - Code: `src/lib/env.ts`, `src/lib/medivance/db.ts`.
 - [x] MFR/CR distinction represented in output model:
   - Final output includes `masterFormulationRecord` and `compoundingRecord`.
   - Code: `src/lib/medivance/pipeline.ts`.
@@ -40,6 +43,8 @@ Scope: Pharmaceutical Compounding AI System requirements from the architecture d
   - Uses `consume_inventory_for_job` RPC + `inventory_consumptions` uniqueness.
   - Code: `src/lib/medivance/db.ts`, migration `202602220005...`.
 - [x] Add low-stock warning alerting in inventory hard checks (near-shortage detection).
+  - Warning sensitivity is now configurable globally and by formula safety profile ingredient map.
+  - Code: `src/lib/env.ts`, `src/lib/medivance/types.ts`, `src/lib/medivance/db.ts`, `src/lib/medivance/safety.ts`.
 - [ ] Add configurable reorder thresholds per ingredient/lot in schema and UI.
 - [ ] Expand deterministic clinical reference depth (structured external interaction/dose datasets beyond label-text heuristics).
 - [ ] Add structured safety reference tables (concentration limits by route, incompatibility matrix catalog, vehicle/base compatibility).

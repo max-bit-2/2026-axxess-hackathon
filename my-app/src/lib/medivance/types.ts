@@ -37,6 +37,8 @@ export interface FormulaSafetyProfile {
   maxDailyDoseMg?: number;
   contraindicatedIngredients?: string[];
   incompatibilities?: string[][];
+  lowStockWarningMultiplier?: number;
+  lowStockWarningMultiplierByIngredient?: Record<string, number>;
 }
 
 export interface WorkingPrescription {

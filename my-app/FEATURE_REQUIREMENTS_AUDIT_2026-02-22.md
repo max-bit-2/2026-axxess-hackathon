@@ -11,7 +11,7 @@ Status legend:
 
 | Requirement | Status | Evidence in code | Gap / Risk | Priority |
 |---|---|---|---|---|
-| Queue shows today's jobs by patient/prescription | Implemented | `src/lib/medivance/db.ts` (`getQueueItems`), `/dashboard` UI | None | P1 |
+| Queue shows today's jobs by patient/prescription | Implemented | `src/lib/medivance/db.ts` (`getQueueItems`) with `MEDIVANCE_QUEUE_TIMEZONE`, `/dashboard` UI | None | P1 |
 | Formula resolution hierarchy (patient -> company -> generate) | Implemented | `src/lib/medivance/db.ts` (`resolveFormulaForPrescription`) | Generated path is templated fallback, not literature-driven | P1 |
 | External drug registry lookup (NDC, labeling) | Implemented | `src/lib/medivance/references.ts` + openFDA calls | No FDA 503B facility integration yet | P1 |
 | Deterministic calculation engine (no LLM arithmetic) | Implemented | `src/lib/medivance/calculations.ts` | Advanced compounding math set not complete | P1 |
@@ -32,7 +32,7 @@ Status legend:
 | BUD validation | Implemented | `src/lib/medivance/calculations.ts` + `src/lib/medivance/safety.ts` | USP table depth not yet comprehensive | P1 |
 | Lot expiry validation | Implemented | `src/lib/medivance/safety.ts` | None | P0 |
 | Incompatibility check | Implemented | `src/lib/medivance/safety.ts` (formula safety profile pairs) | No external compatibility dataset wired yet | P1 |
-| Inventory availability pre-check + low-stock warning | Implemented | `src/lib/medivance/safety.ts` + `db.ts` inventory fetch | Configurable reorder thresholds are not modeled yet | P1 |
+| Inventory availability pre-check + low-stock warning | Implemented | `src/lib/medivance/safety.ts` + `db.ts` inventory fetch; env + formula-configurable warning multipliers | Configurable reorder thresholds/workflow are not modeled yet | P1 |
 | Fail-closed external check mode | Implemented | `src/lib/env.ts`, `pipeline.ts`, `external-safety.ts` | Must validate in production with real API failure drills | P0 |
 
 ## Records, Compliance, and Data Model Coverage

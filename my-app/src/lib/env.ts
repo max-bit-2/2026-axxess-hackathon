@@ -1,3 +1,11 @@
+function positiveNumberFromEnv(value: string | undefined, fallback: number) {
+  const parsed = Number.parseFloat(value ?? "");
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
 export const env = {
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
@@ -12,6 +20,14 @@ export const env = {
     process.env.DAILYMED_BASE_URL ?? "https://dailymed.nlm.nih.gov/dailymed/services/v2",
   failClosedExternalChecks:
     (process.env.FAIL_CLOSED_EXTERNAL_CHECKS ?? "true").toLowerCase() !== "false",
+  queueTimezone:
+    process.env.MEDIVANCE_QUEUE_TIMEZONE ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
+    "UTC",
+  lowStockWarningMultiplier: positiveNumberFromEnv(
+    process.env.MEDIVANCE_LOW_STOCK_WARNING_MULTIPLIER,
+    1.25,
+  ),
 };
 
 export function hasSupabaseEnv() {

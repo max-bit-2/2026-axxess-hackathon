@@ -127,6 +127,39 @@ describe("safety hard checks", () => {
     expect(summary.warnings.join(" ")).toContain("Inventory is low");
   });
 
+  it("supports ingredient-specific low-stock warning multipliers", () => {
+    const summary = runHardChecks({
+      result: baselineResult,
+      allergies: [],
+      formulaSafety: {
+        ...baselineSafety,
+        lowStockWarningMultiplierByIngredient: {
+          Vehicle: 1.1,
+        },
+      },
+      ingredients: ["Omeprazole", "Vehicle"],
+      inventoryLots: [
+        {
+          ingredientName: "Omeprazole",
+          availableQuantity: 1,
+          unit: "g",
+          expiresOn: "2026-12-31",
+          lotNumber: "LOT-1",
+        },
+        {
+          ingredientName: "Vehicle",
+          availableQuantity: 120,
+          unit: "mL",
+          expiresOn: "2026-12-31",
+          lotNumber: "LOT-2",
+        },
+      ],
+    });
+
+    expect(summary.checks.inventoryAvailability.status).toBe("PASS");
+    expect(summary.warnings.join(" ")).not.toContain("Vehicle");
+  });
+
   it("fails when lot expiry is earlier than BUD", () => {
     const summary = runHardChecks({
       result: baselineResult,

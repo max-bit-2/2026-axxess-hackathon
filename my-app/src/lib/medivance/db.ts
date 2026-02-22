@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { env } from "@/lib/env";
 import type {
   FormulaSource,
   FormulaSafetyProfile,
@@ -30,6 +31,40 @@ function asNumber(value: unknown, fallback: number) {
 
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
+}
+
+function asPositiveNumberOptional(value: unknown) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return undefined;
+  return numeric;
+}
+
+function asNumberMap(value: unknown): Record<string, number> {
+  const source = asRecord(value, {});
+  const entries = Object.entries(source).flatMap(([key, raw]) => {
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric) || numeric <= 0) return [];
+    return [[key, numeric] as const];
+  });
+  return Object.fromEntries(entries);
+}
+
+function toDateKeyInTimezone(value: Date, timezone: string) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(value);
+  } catch {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(value);
+  }
 }
 
 export interface QueueItem {
@@ -368,7 +403,7 @@ export async function getQueueItems(
 
   if (error) throw error;
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const todayDateKey = toDateKeyInTimezone(new Date(), env.queueTimezone);
 
   return (data ?? [])
     .map((row: Record<string, unknown>) => {
@@ -394,7 +429,7 @@ export async function getQueueItems(
     })
     .filter((item) => {
       if (!item.dueAt) return false;
-      return item.dueAt.slice(0, 10) === todayUtc;
+      return toDateKeyInTimezone(new Date(item.dueAt), env.queueTimezone) === todayDateKey;
     });
 }
 
@@ -525,6 +560,12 @@ function parseFormulaRow(rowValue: unknown): ResolvedFormula {
         [],
       ),
       incompatibilities: asArray<string[]>(safetyRecord.incompatibilities, []),
+      lowStockWarningMultiplier: asPositiveNumberOptional(
+        safetyRecord.lowStockWarningMultiplier,
+      ),
+      lowStockWarningMultiplierByIngredient: asNumberMap(
+        safetyRecord.lowStockWarningMultiplierByIngredient,
+      ),
     },
     instructions: asString(row.instructions),
     budRule: {
