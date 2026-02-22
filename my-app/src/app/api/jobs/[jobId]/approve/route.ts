@@ -26,7 +26,11 @@ export async function POST(
 
   const formData = await request.formData();
   const noteValue = formData.get("note");
-  const note = typeof noteValue === "string" ? noteValue : "";
+  const note = typeof noteValue === "string" ? noteValue.trim() : "";
+
+  if (!note) {
+    return buildRedirect(request, jobId, "Approval rationale is required.");
+  }
 
   try {
     await approveCompoundingJob(supabase, {

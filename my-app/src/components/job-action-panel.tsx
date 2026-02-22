@@ -32,13 +32,13 @@ export function JobActionPanel({
 
       <form action={`/api/jobs/${jobId}/approve`} method="post" className="space-y-3">
         <label className="text-xs font-semibold tracking-[0.08em] text-slate-600 uppercase">
-          Approval note (optional)
+          Approval rationale
         </label>
-        <input
-          className="glass-input w-full"
-          type="text"
+        <textarea
+          className="glass-input h-16 w-full resize-none"
           name="note"
-          placeholder="Approved after final review."
+          placeholder="Required: explain why this report is safe to approve."
+          required
         />
         <button
           className="pill-btn w-full disabled:cursor-not-allowed disabled:opacity-50"

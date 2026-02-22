@@ -4,6 +4,11 @@ import {
   applyDeterministicCorrections,
   calculateCompoundingReport,
 } from "@/lib/medivance/calculations";
+import {
+  runIntakePreflight,
+  runPreCompoundingPreflight,
+  type PreflightSummary,
+} from "@/lib/medivance/preflight";
 import { runAiReview } from "@/lib/medivance/ai-review";
 import {
   getInventoryForIngredients,
@@ -32,6 +37,43 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+async function handlePreflightFailure(
+  supabase: SupabaseClient,
+  params: {
+    userId: string;
+    jobId: string;
+    stage: "intake" | "pre_compounding";
+    summary: PreflightSummary;
+  },
+) {
+  await updateJobState(supabase, {
+    jobId: params.jobId,
+    status: "needs_review",
+    iterationCount: 0,
+    lastError: params.summary.blockingIssues[0] ?? "Preflight validation failed.",
+  });
+
+  await writeAuditEvent(supabase, {
+    ownerId: params.userId,
+    jobId: params.jobId,
+    eventType: "pipeline.preflight_failed",
+    eventPayload: {
+      stage: params.stage,
+      blockingIssues: params.summary.blockingIssues,
+      warnings: params.summary.warnings,
+      checks: params.summary.checks,
+      timestamp: nowIso(),
+    },
+  });
+
+  return {
+    status: "needs_review" as const,
+    attempts: 0,
+    blockingIssues: params.summary.blockingIssues,
+    warnings: params.summary.warnings,
+  };
+}
+
 export async function runCompoundingPipeline(
   supabase: SupabaseClient,
   params: {
@@ -41,7 +83,30 @@ export async function runCompoundingPipeline(
   },
 ) {
   const context = await getJobContext(supabase, params.userId, params.jobId);
+  const intakeSummary = runIntakePreflight(context);
+  if (intakeSummary.blockingIssues.length > 0) {
+    return handlePreflightFailure(supabase, {
+      userId: params.userId,
+      jobId: params.jobId,
+      stage: "intake",
+      summary: intakeSummary,
+    });
+  }
+
   const formula = await resolveFormulaForPrescription(supabase, params.userId, context);
+  const preCompoundingSummary = runPreCompoundingPreflight({
+    context,
+    formula,
+    pharmacistFeedback: params.pharmacistFeedback,
+  });
+  if (preCompoundingSummary.blockingIssues.length > 0) {
+    return handlePreflightFailure(supabase, {
+      userId: params.userId,
+      jobId: params.jobId,
+      stage: "pre_compounding",
+      summary: preCompoundingSummary,
+    });
+  }
 
   await updateJobState(supabase, {
     jobId: params.jobId,
@@ -90,7 +155,7 @@ export async function runCompoundingPipeline(
 
   let finalStatus: JobStatus = "needs_review";
   let finalIssues: string[] = [];
-  let finalWarnings: string[] = [];
+  let finalWarnings: string[] = [...intakeSummary.warnings, ...preCompoundingSummary.warnings];
   let attempts = 0;
 
   for (let attempt = 1; attempt <= MAX_ITERATIONS; attempt += 1) {
@@ -126,7 +191,7 @@ export async function runCompoundingPipeline(
       );
     }
 
-    const warnings = [...hardSummary.warnings];
+    const warnings = [...hardSummary.warnings, ...intakeSummary.warnings, ...preCompoundingSummary.warnings];
     if (aiReview.overall === "NEEDS_REVIEW") {
       warnings.push(
         `AI review requires attention: ${aiReview.preparationCompleteness.detail}`,
@@ -220,9 +285,14 @@ export async function approveCompoundingJob(
     userId: string;
     jobId: string;
     approverId: string;
-    note?: string;
+    note: string;
   },
 ) {
+  const note = params.note.trim();
+  if (!note) {
+    throw new Error("Approval rationale is required.");
+  }
+
   const context = await getJobContext(supabase, params.userId, params.jobId);
   if (context.job.status !== "verified") {
     throw new Error("Only verified jobs can be approved.");
@@ -262,7 +332,7 @@ export async function approveCompoundingJob(
     approvedAt: nowIso(),
     context,
     report,
-    pharmacistNote: params.note ?? null,
+    pharmacistNote: note,
   };
 
   await saveFinalOutput(supabase, {
@@ -289,7 +359,7 @@ export async function approveCompoundingJob(
     ownerId: params.userId,
     jobId: params.jobId,
     decision: "approve",
-    feedback: params.note?.trim() ? params.note : "Approved by pharmacist.",
+    feedback: note,
   });
 
   await writeAuditEvent(supabase, {
@@ -298,7 +368,7 @@ export async function approveCompoundingJob(
     eventType: "job.approved",
     eventPayload: {
       approvedBy: params.approverId,
-      note: params.note ?? null,
+      note,
       timestamp: nowIso(),
     },
   });
