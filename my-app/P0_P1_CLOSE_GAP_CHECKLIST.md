@@ -23,9 +23,9 @@ Scope: Pharmaceutical Compounding AI System requirements from the architecture d
 - [x] Iteration cap + pharmacist escalation enforced:
   - Max 3 loop iterations; escalates to pharmacist when unresolved.
   - Code: `src/lib/medivance/pipeline.ts`.
-- [x] Part 11 strict signing flow coded:
-  - Signature PIN, one-time signing intent/challenge, signature meaning, attestation, immutable final records.
-  - Code: `src/lib/medivance/signing.ts`, `src/lib/medivance/db.ts`, `src/lib/medivance/pipeline.ts`, API routes.
+- [x] Demo signing flow coded:
+  - Signature meaning, attestation, immutable final records.
+  - Code: `src/lib/medivance/signing.ts`, `src/lib/medivance/pipeline.ts`, API routes.
 - [ ] Apply required Supabase migrations in target project (still pending by request):
   - `supabase/migrations/202602220005_compliance_locking_and_inventory.sql`
   - `supabase/migrations/202602220006_part11_signature_pin_and_intents.sql`

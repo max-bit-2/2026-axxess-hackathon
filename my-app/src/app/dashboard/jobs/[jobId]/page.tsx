@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
@@ -8,7 +7,6 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { requireUser } from "@/lib/auth";
 import { getJobPresentationData } from "@/lib/medivance/db";
-import { parseSigningIntentCookie, SIGNING_INTENT_COOKIE } from "@/lib/medivance/signing";
 
 const dateTime = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -114,10 +112,6 @@ export default async function JobDetailsPage({
   }
 
   const { context, reports, feedback, finalOutput, audit } = data;
-  const cookieStore = await cookies();
-  const signingIntentRaw = cookieStore.get(SIGNING_INTENT_COOKIE)?.value;
-  const parsedIntent = parseSigningIntentCookie(signingIntentRaw);
-  const signingIntent = parsedIntent?.jobId === jobId ? parsedIntent : null;
   const latestReport = reports[0];
   const latestValues =
     latestReport && typeof latestReport.report === "object" ? latestReport.report : {};
@@ -208,7 +202,6 @@ export default async function JobDetailsPage({
         <JobActionPanel
           jobId={jobId}
           jobStatus={context.job.status}
-          signingIntent={signingIntent}
         />
       </section>
 

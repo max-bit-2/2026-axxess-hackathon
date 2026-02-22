@@ -20,7 +20,7 @@ Next.js + Supabase MVP for pharmaceutical compounding workflow:
 - Part 11-style electronic signature attestation on approval
 - Final label payload + immutable audit trail records
 - Idempotent inventory consumption on approval
-- Part 11 strict signing flow (session + signature PIN + one-time signing challenge)
+- Demo signing flow (signature meaning + attestation)
 
 ## Stack
 
@@ -68,6 +68,8 @@ Migrations are in `supabase/migrations`:
 - `202602220004_schema_hardening_indexes.sql`
 - `202602220005_compliance_locking_and_inventory.sql`
 - `202602220006_part11_signature_pin_and_intents.sql`
+- `202602220007_remove_signing_intent_challenge.sql`
+- `202602220008_remove_signature_pin_for_demo.sql`
 
 Applied tables include:
 
@@ -82,18 +84,13 @@ Applied tables include:
 - `final_outputs`
 - `audit_events`
 - `inventory_consumptions`
-- `signing_intents`
 
 All core tables use RLS scoped to `auth.uid()`.
 Immutable tables (`calculation_reports`, `final_outputs`, `audit_events`) are insert/select only.
 
 ## Signing Flow
 
-1. Pharmacist sets/updates signature PIN (`/api/signature/pin`).
-2. Pharmacist generates one-time signing challenge (`/api/jobs/[jobId]/signing-intent`).
-3. Approval requires:
-   - Challenge code re-entry
-   - Signature PIN verification
+1. Approval requires:
    - Signature meaning
    - Attestation checkbox
 

@@ -42,7 +42,7 @@ Status legend:
 | MFR/CR separation | Implemented | `approveCompoundingJob` final report includes both `masterFormulationRecord` and `compoundingRecord` | None | P1 |
 | MFR-required metadata fields | Implemented | `formulas` fields + migration `202602220005...` | Validation depth for every USP-required field can be tightened | P1 |
 | Immutable audit/report/final tables | Implemented (migration-defined) | `202602220005_compliance_locking_and_inventory.sql` triggers | Not enforced until migration applied | P0 |
-| Part 11 strict signing flow (PIN + challenge + meaning + attestation) | Implemented (app + migration-defined RPCs) | `src/lib/medivance/signing.ts`, `db.ts`, routes, migration `202602220006...` | Not enforceable until migration applied | P0 |
+| Demo signing flow (meaning + attestation) | Implemented | `src/lib/medivance/signing.ts`, `pipeline.ts`, routes | Simplified for demo; weaker than strict Part 11 controls | P1 |
 | Inventory consumption deduction on approval | Implemented | RPC `consume_inventory_for_job` + `inventory_consumptions` | Depends on migration apply | P1 |
 | RBAC and tenant isolation | Implemented baseline | Supabase RLS policies | Fine-grained role model beyond owner/pharmacist not yet present | P1 |
 | HIPAA program controls (BAA workflow, PHI minimization policy, full access logging program) | Partial | RLS + app audit events present | Formal HIPAA/SOC control program remains open | P1 |
