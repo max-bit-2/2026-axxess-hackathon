@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getOptionalUser } from "@/lib/auth";
 import { rejectCompoundingJob } from "@/lib/medivance/pipeline";
-import { createClient } from "@/lib/supabase/server";
 
 function buildRedirect(request: Request, jobId: string, toast: string) {
   const requestUrl = new URL(request.url);
@@ -15,10 +15,7 @@ export async function POST(
   context: { params: Promise<{ jobId: string }> },
 ) {
   const { jobId } = await context.params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getOptionalUser();
 
   if (!user) {
     return NextResponse.redirect(new URL("/signin", request.url));

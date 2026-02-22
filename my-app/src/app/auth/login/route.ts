@@ -13,6 +13,9 @@ function safeNextPath(nextValue: string | null) {
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const nextPath = safeNextPath(requestUrl.searchParams.get("next"));
+  if (env.disableAuthForDemo) {
+    return NextResponse.redirect(new URL(nextPath, requestUrl.origin));
+  }
 
   const supabase = await createClient();
   const callbackUrl = new URL("/auth/callback", env.siteUrl);
