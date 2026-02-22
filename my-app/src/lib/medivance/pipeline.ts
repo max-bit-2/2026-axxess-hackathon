@@ -14,7 +14,6 @@ import {
 import { runAiReview } from "@/lib/medivance/ai-review";
 import { fetchExternalClinicalSafetySnapshot } from "@/lib/medivance/external-safety";
 import {
-  consumeSigningIntent,
   consumeInventoryForJob,
   getInventoryForIngredients,
   getJobContext,
@@ -408,9 +407,6 @@ export async function approveCompoundingJob(
     signerEmail: string;
     signatureMeaning: string;
     signatureAttestation: boolean;
-    signaturePin: string;
-    signingIntentId: string;
-    signingChallengeCode: string;
   },
 ) {
   const note = params.note.trim();
@@ -435,23 +431,6 @@ export async function approveCompoundingJob(
     throw new Error("Signer email is required for electronic signature.");
   }
   const signatureMeaning = normalizeSignatureMeaning(params.signatureMeaning);
-  const signaturePin = params.signaturePin.trim();
-  const signingIntentId = params.signingIntentId.trim();
-  const signingChallengeCode = params.signingChallengeCode.trim();
-  if (!signaturePin) {
-    throw new Error("Signature PIN is required.");
-  }
-  if (!signingIntentId || !signingChallengeCode) {
-    throw new Error("Signing challenge is required. Generate a new challenge.");
-  }
-
-  await consumeSigningIntent(supabase, {
-    intentId: signingIntentId,
-    jobId: params.jobId,
-    signatureMeaning,
-    challengeCode: signingChallengeCode,
-    pin: signaturePin,
-  });
 
   const { data: latestReportData, error: reportError } = await supabase
     .from("calculation_reports")

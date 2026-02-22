@@ -9,7 +9,6 @@ import type {
   SignatureMeaning,
 } from "@/lib/medivance/types";
 import type { InventoryLotSnapshot } from "@/lib/medivance/safety";
-import { normalizeSignatureMeaning } from "@/lib/medivance/signing";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -165,14 +164,6 @@ export interface AuditEventRow {
   eventType: string;
   eventPayload: JsonRecord;
   createdAt: string;
-}
-
-export interface SigningIntentPayload {
-  intentId: string;
-  challengeCode: string;
-  signatureMeaning: SignatureMeaning;
-  issuedAt: string;
-  expiresAt: string;
 }
 
 export async function ensureDemoData(
@@ -868,103 +859,6 @@ export async function consumeInventoryForJob(
 
   if (error) throw error;
   return asRecord(data);
-}
-
-export async function setSignaturePin(
-  supabase: SupabaseClient,
-  params: {
-    pin: string;
-  },
-) {
-  const { data, error } = await supabase.rpc("set_signature_pin", {
-    p_pin: params.pin,
-  });
-
-  if (error) throw error;
-  return asRecord(data);
-}
-
-export async function issueSigningIntent(
-  supabase: SupabaseClient,
-  params: {
-    jobId: string;
-    signatureMeaning: SignatureMeaning;
-  },
-) {
-  const { data, error } = await supabase.rpc("issue_signing_intent", {
-    p_job_id: params.jobId,
-    p_signature_meaning: params.signatureMeaning,
-  });
-
-  if (error) throw error;
-  const payload = asRecord(data);
-  const ok = payload.ok === true;
-  if (!ok) {
-    throw new Error(asString(payload.reason, "Failed to issue signing intent."));
-  }
-
-  return {
-    intentId: asString(payload.intentId),
-    challengeCode: asString(payload.challengeCode),
-    signatureMeaning: normalizeSignatureMeaning(asString(payload.signatureMeaning)),
-    issuedAt: asString(payload.issuedAt),
-    expiresAt: asString(payload.expiresAt),
-  } satisfies SigningIntentPayload;
-}
-
-export async function consumeSigningIntent(
-  supabase: SupabaseClient,
-  params: {
-    intentId: string;
-    jobId: string;
-    signatureMeaning: SignatureMeaning;
-    challengeCode: string;
-    pin: string;
-  },
-) {
-  const { data, error } = await supabase.rpc("consume_signing_intent", {
-    p_intent_id: params.intentId,
-    p_job_id: params.jobId,
-    p_challenge_code: params.challengeCode,
-    p_pin: params.pin,
-    p_signature_meaning: params.signatureMeaning,
-  });
-
-  if (error) throw error;
-  const payload = asRecord(data);
-  if (payload.ok !== true) {
-    const reason = asString(payload.reason, "signature_verification_failed");
-    if (reason === "pin_failed") {
-      const pinResult = asRecord(payload.pinResult);
-      const pinReason = asString(pinResult.reason, "invalid_pin");
-      if (pinReason === "locked") {
-        throw new Error(
-          `Signature PIN is temporarily locked until ${asString(pinResult.lockedUntil, "later")}.`,
-        );
-      }
-      if (pinReason === "pin_not_set") {
-        throw new Error("Signature PIN is not set. Set your signature PIN before approval.");
-      }
-      throw new Error("Signature PIN is invalid.");
-    }
-
-    if (reason === "intent_expired") {
-      throw new Error("Signing challenge expired. Generate a new one.");
-    }
-    if (reason === "intent_already_used") {
-      throw new Error("Signing challenge already used. Generate a new one.");
-    }
-    if (reason === "challenge_mismatch") {
-      throw new Error("Signing challenge code is incorrect.");
-    }
-    if (reason === "job_not_verified") {
-      throw new Error("Job is no longer in verified status.");
-    }
-
-    throw new Error(`Signature verification failed: ${reason}.`);
-  }
-
-  return payload;
 }
 
 export async function insertPharmacistFeedback(

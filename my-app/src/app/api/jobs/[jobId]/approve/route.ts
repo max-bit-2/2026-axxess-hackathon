@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { approveCompoundingJob } from "@/lib/medivance/pipeline";
-import { SIGNING_INTENT_COOKIE } from "@/lib/medivance/signing";
 import { createClient } from "@/lib/supabase/server";
 
 function buildRedirect(request: Request, jobId: string, toast: string) {
@@ -37,16 +36,6 @@ export async function POST(
     typeof signatureMeaningValue === "string"
       ? signatureMeaningValue
       : "reviewed_and_approved";
-  const signaturePinValue = formData.get("signaturePin");
-  const signaturePin = typeof signaturePinValue === "string" ? signaturePinValue.trim() : "";
-  const signingIntentIdValue = formData.get("signingIntentId");
-  const signingIntentId =
-    typeof signingIntentIdValue === "string" ? signingIntentIdValue.trim() : "";
-  const signingChallengeCodeValue = formData.get("signingChallengeCode");
-  const signingChallengeCode =
-    typeof signingChallengeCodeValue === "string"
-      ? signingChallengeCodeValue.trim()
-      : "";
   const signatureAttestation = formData.get("signatureAttestation") === "on";
   const signerName = String(
     user.user_metadata.full_name ?? user.user_metadata.name ?? user.email ?? "",
@@ -62,19 +51,9 @@ export async function POST(
       signerEmail,
       signatureMeaning,
       signatureAttestation,
-      signaturePin,
-      signingIntentId,
-      signingChallengeCode,
       note,
     });
-    const response = buildRedirect(request, jobId, "Job approved and final label generated.");
-    response.cookies.set({
-      name: SIGNING_INTENT_COOKIE,
-      value: "",
-      path: "/",
-      maxAge: 0,
-    });
-    return response;
+    return buildRedirect(request, jobId, "Job approved and final label generated.");
   } catch (error) {
     const message =
       error instanceof Error ? `Approval failed: ${error.message}` : "Approval failed.";
