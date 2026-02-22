@@ -1,0 +1,806 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type {
+  FormulaSource,
+  FormulaSafetyProfile,
+  Ingredient,
+  JobStatus,
+} from "@/lib/medivance/types";
+import type { InventoryLotSnapshot } from "@/lib/medivance/safety";
+
+type JsonRecord = Record<string, unknown>;
+
+function asArray<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) ? (value as T[]) : fallback;
+}
+
+function asRecord(value: unknown, fallback: JsonRecord = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallback;
+  }
+  return value as JsonRecord;
+}
+
+function asNumber(value: unknown, fallback: number) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+export interface QueueItem {
+  jobId: string;
+  status: JobStatus;
+  priority: number;
+  iterationCount: number;
+  lastError: string | null;
+  createdAt: string;
+  medicationName: string;
+  route: string;
+  dueAt: string;
+  patientId: string;
+  patientName: string;
+}
+
+export interface ResolvedFormula {
+  id: string;
+  source: FormulaSource;
+  name: string;
+  medicationName: string;
+  ingredients: Ingredient[];
+  safetyProfile: FormulaSafetyProfile;
+  instructions: string;
+  budRule: { category: "aqueous" | "non_aqueous"; hasStabilityData: boolean; stabilityDays?: number };
+}
+
+export interface JobContext {
+  job: {
+    id: string;
+    status: JobStatus;
+    iterationCount: number;
+    priority: number;
+    lastError: string | null;
+    pharmacistFeedback: string | null;
+    formulaId: string | null;
+  };
+  prescription: {
+    id: string;
+    patientId: string;
+    medicationName: string;
+    route: string;
+    doseMgPerKg: number;
+    frequencyPerDay: number;
+    strengthMgPerMl: number;
+    dispenseVolumeMl: number;
+    indication: string | null;
+    notes: string | null;
+    dueAt: string;
+  };
+  patient: {
+    id: string;
+    fullName: string;
+    weightKg: number;
+    allergies: string[];
+    notes: string | null;
+  };
+}
+
+export interface CalculationReportRow {
+  id: string;
+  version: number;
+  overallStatus: string;
+  report: JsonRecord;
+  hardChecks: JsonRecord;
+  aiReview: JsonRecord;
+  createdAt: string;
+}
+
+export interface FeedbackRow {
+  id: string;
+  decision: string;
+  feedback: string;
+  createdAt: string;
+}
+
+export interface FinalOutputRow {
+  id: string;
+  approvedAt: string;
+  finalReport: JsonRecord;
+  labelPayload: JsonRecord;
+}
+
+export interface AuditEventRow {
+  id: string;
+  eventType: string;
+  eventPayload: JsonRecord;
+  createdAt: string;
+}
+
+export async function ensureDemoData(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  const { count, error: countError } = await supabase
+    .from("patients")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", userId);
+
+  if (countError) throw countError;
+  if ((count ?? 0) > 0) return;
+
+  const { data: patient, error: patientError } = await supabase
+    .from("patients")
+    .insert({
+      owner_id: userId,
+      first_name: "Avery",
+      last_name: "Lopez",
+      dob: "2016-05-14",
+      weight_kg: 22.4,
+      allergies: ["sulfa"],
+      notes: "Pediatric patient. Prefers grape-flavored suspension.",
+    })
+    .select("id")
+    .single();
+
+  if (patientError || !patient) throw patientError ?? new Error("Failed to seed patient.");
+
+  const companyFormula = {
+    owner_id: userId,
+    patient_id: null,
+    medication_name: "Baclofen",
+    name: "Baclofen 10 mg/mL Oral Suspension",
+    source: "company",
+    ingredient_profile: [
+      {
+        name: "Baclofen",
+        role: "api",
+        quantity: 1,
+        unit: "g",
+        concentrationMgPerMl: 10,
+      },
+      {
+        name: "Ora-Blend",
+        role: "vehicle",
+        quantity: 0,
+        unit: "mL",
+      },
+    ],
+    safety_profile: {
+      minSingleDoseMg: 2,
+      maxSingleDoseMg: 30,
+      maxDailyDoseMg: 90,
+      incompatibilities: [["baclofen", "ethanol"]],
+    },
+    instructions:
+      "Triturate baclofen to a fine powder, wet with glycerin, and qs with Ora-Blend.",
+  };
+
+  const patientSpecificFormula = {
+    owner_id: userId,
+    patient_id: patient.id,
+    medication_name: "Omeprazole",
+    name: "Avery Omeprazole 2 mg/mL Custom",
+    source: "patient",
+    ingredient_profile: [
+      {
+        name: "Omeprazole",
+        role: "api",
+        quantity: 0.5,
+        unit: "g",
+        concentrationMgPerMl: 2,
+      },
+      {
+        name: "Sodium Bicarbonate Vehicle",
+        role: "vehicle",
+        quantity: 0,
+        unit: "mL",
+      },
+    ],
+    safety_profile: {
+      minSingleDoseMg: 2,
+      maxSingleDoseMg: 40,
+      maxDailyDoseMg: 80,
+    },
+    instructions:
+      "Suspend omeprazole powder in sodium bicarbonate vehicle. Protect from light.",
+  };
+
+  const { error: formulaError } = await supabase
+    .from("formulas")
+    .insert([companyFormula, patientSpecificFormula]);
+  if (formulaError) throw formulaError;
+
+  const { error: inventoryError } = await supabase.from("inventory_lots").insert([
+    {
+      owner_id: userId,
+      ingredient_name: "Baclofen",
+      ndc: "00000-0000-10",
+      lot_number: "BAC-2601",
+      available_quantity: 12,
+      unit: "g",
+      expires_on: "2027-02-01",
+    },
+    {
+      owner_id: userId,
+      ingredient_name: "Ora-Blend",
+      lot_number: "ORB-3421",
+      available_quantity: 2100,
+      unit: "mL",
+      expires_on: "2026-11-30",
+    },
+    {
+      owner_id: userId,
+      ingredient_name: "Omeprazole",
+      lot_number: "OME-9981",
+      available_quantity: 2.5,
+      unit: "g",
+      expires_on: "2026-09-15",
+    },
+    {
+      owner_id: userId,
+      ingredient_name: "Sodium Bicarbonate Vehicle",
+      lot_number: "SBV-1021",
+      available_quantity: 1100,
+      unit: "mL",
+      expires_on: "2026-08-10",
+    },
+  ]);
+  if (inventoryError) throw inventoryError;
+
+  const prescriptions = [
+    {
+      owner_id: userId,
+      patient_id: patient.id,
+      medication_name: "Omeprazole",
+      indication: "GERD",
+      route: "PO",
+      dose_mg_per_kg: 1,
+      frequency_per_day: 2,
+      strength_mg_per_ml: 2,
+      dispense_volume_ml: 150,
+      notes: "Take before breakfast and dinner.",
+      due_at: new Date().toISOString(),
+    },
+    {
+      owner_id: userId,
+      patient_id: patient.id,
+      medication_name: "Baclofen",
+      indication: "Spasticity",
+      route: "PO",
+      dose_mg_per_kg: 0.35,
+      frequency_per_day: 3,
+      strength_mg_per_ml: 10,
+      dispense_volume_ml: 120,
+      notes: "Titrate to response.",
+      due_at: new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString(),
+    },
+  ];
+
+  const { error: prescriptionError } = await supabase
+    .from("prescriptions")
+    .insert(prescriptions);
+  if (prescriptionError) throw prescriptionError;
+}
+
+export async function getQueueItems(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("compounding_jobs")
+    .select(
+      `
+      id,
+      status,
+      priority,
+      iteration_count,
+      last_error,
+      created_at,
+      prescriptions!inner (
+        id,
+        medication_name,
+        route,
+        due_at,
+        patient_id,
+        patients!inner (
+          id,
+          first_name,
+          last_name
+        )
+      )
+    `,
+    )
+    .eq("owner_id", userId)
+    .order("priority", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: Record<string, unknown>) => {
+    const prescription = asRecord(row.prescriptions);
+    const patient = asRecord(prescription.patients);
+    const firstName = asString(patient.first_name, "Unknown");
+    const lastName = asString(patient.last_name, "Patient");
+
+    return {
+      jobId: asString(row.id),
+      status: asString(row.status, "queued") as JobStatus,
+      priority: asNumber(row.priority, 2),
+      iterationCount: asNumber(row.iteration_count, 0),
+      lastError: row.last_error ? asString(row.last_error) : null,
+      createdAt: asString(row.created_at),
+      medicationName: asString(prescription.medication_name, "Unknown"),
+      route: asString(prescription.route, "PO"),
+      dueAt: asString(prescription.due_at),
+      patientId: asString(prescription.patient_id),
+      patientName: `${firstName} ${lastName}`,
+    } satisfies QueueItem;
+  });
+}
+
+export async function getJobContext(
+  supabase: SupabaseClient,
+  userId: string,
+  jobId: string,
+) {
+  const { data, error } = await supabase
+    .from("compounding_jobs")
+    .select(
+      `
+      id,
+      status,
+      priority,
+      iteration_count,
+      last_error,
+      pharmacist_feedback,
+      formula_id,
+      prescriptions!inner (
+        id,
+        patient_id,
+        medication_name,
+        route,
+        dose_mg_per_kg,
+        frequency_per_day,
+        strength_mg_per_ml,
+        dispense_volume_ml,
+        indication,
+        notes,
+        due_at,
+        patients!inner (
+          id,
+          first_name,
+          last_name,
+          weight_kg,
+          allergies,
+          notes
+        )
+      )
+    `,
+    )
+    .eq("owner_id", userId)
+    .eq("id", jobId)
+    .single();
+
+  if (error || !data) throw error ?? new Error("Job not found.");
+
+  const rowData = asRecord(data);
+  const prescription = asRecord(rowData.prescriptions);
+  const patient = asRecord(prescription.patients);
+
+  return {
+    job: {
+      id: asString(data.id),
+      status: asString(data.status, "queued") as JobStatus,
+      iterationCount: asNumber(data.iteration_count, 0),
+      priority: asNumber(data.priority, 2),
+      lastError: data.last_error ? asString(data.last_error) : null,
+      pharmacistFeedback: data.pharmacist_feedback
+        ? asString(data.pharmacist_feedback)
+        : null,
+      formulaId: data.formula_id ? asString(data.formula_id) : null,
+    },
+    prescription: {
+      id: asString(prescription.id),
+      patientId: asString(prescription.patient_id),
+      medicationName: asString(prescription.medication_name),
+      route: asString(prescription.route, "PO"),
+      doseMgPerKg: asNumber(prescription.dose_mg_per_kg, 1),
+      frequencyPerDay: asNumber(prescription.frequency_per_day, 1),
+      strengthMgPerMl: asNumber(prescription.strength_mg_per_ml, 10),
+      dispenseVolumeMl: asNumber(prescription.dispense_volume_ml, 100),
+      indication: prescription.indication ? asString(prescription.indication) : null,
+      notes: prescription.notes ? asString(prescription.notes) : null,
+      dueAt: asString(prescription.due_at),
+    },
+    patient: {
+      id: asString(patient.id),
+      fullName: `${asString(patient.first_name)} ${asString(patient.last_name)}`,
+      weightKg: asNumber(patient.weight_kg, 70),
+      allergies: asArray<string>(patient.allergies, []),
+      notes: patient.notes ? asString(patient.notes) : null,
+    },
+  } satisfies JobContext;
+}
+
+function parseFormulaRow(rowValue: unknown): ResolvedFormula {
+  const row = asRecord(rowValue);
+  const safetyRecord = asRecord(row.safety_profile, {});
+  const budCandidate = asRecord(safetyRecord.budRule, {});
+  const category = asString(budCandidate.category, "aqueous");
+
+  return {
+    id: asString(row.id),
+    source: asString(row.source, "generated") as FormulaSource,
+    name: asString(row.name, "Unnamed Formula"),
+    medicationName: asString(row.medication_name),
+    ingredients: asArray<Ingredient>(row.ingredient_profile, []),
+    safetyProfile: {
+      minSingleDoseMg: asNumber(safetyRecord.minSingleDoseMg, 0),
+      maxSingleDoseMg: asNumber(safetyRecord.maxSingleDoseMg, 1000),
+      maxDailyDoseMg: asNumber(safetyRecord.maxDailyDoseMg, 4000),
+      contraindicatedIngredients: asArray<string>(
+        safetyRecord.contraindicatedIngredients,
+        [],
+      ),
+      incompatibilities: asArray<string[]>(safetyRecord.incompatibilities, []),
+    },
+    instructions: asString(row.instructions),
+    budRule: {
+      category: category === "non_aqueous" ? "non_aqueous" : "aqueous",
+      hasStabilityData: Boolean(budCandidate.hasStabilityData),
+      stabilityDays:
+        budCandidate.stabilityDays !== undefined
+          ? asNumber(budCandidate.stabilityDays, 14)
+          : undefined,
+    },
+  };
+}
+
+async function queryFormulaByPriority(
+  supabase: SupabaseClient,
+  userId: string,
+  params: {
+    medicationName: string;
+    patientId?: string;
+    source?: FormulaSource;
+  },
+) {
+  let query = supabase
+    .from("formulas")
+    .select("*")
+    .eq("owner_id", userId)
+    .eq("medication_name", params.medicationName)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (params.patientId) {
+    query = query.eq("patient_id", params.patientId);
+  }
+
+  if (!params.patientId) {
+    query = query.is("patient_id", null);
+  }
+
+  if (params.source) {
+    query = query.eq("source", params.source);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function resolveFormulaForPrescription(
+  supabase: SupabaseClient,
+  userId: string,
+  context: JobContext,
+) {
+  const patientSpecific = await queryFormulaByPriority(supabase, userId, {
+    medicationName: context.prescription.medicationName,
+    patientId: context.patient.id,
+  });
+  if (patientSpecific) return parseFormulaRow(patientSpecific);
+
+  const company = await queryFormulaByPriority(supabase, userId, {
+    medicationName: context.prescription.medicationName,
+    source: "company",
+  });
+  if (company) return parseFormulaRow(company);
+
+  const generatedPayload = {
+    owner_id: userId,
+    patient_id: null,
+    medication_name: context.prescription.medicationName,
+    name: `${context.prescription.medicationName} Auto-Generated Formula`,
+    source: "generated",
+    ingredient_profile: [
+      {
+        name: context.prescription.medicationName,
+        role: "api",
+        quantity: 1,
+        unit: "g",
+        concentrationMgPerMl: context.prescription.strengthMgPerMl,
+      },
+      {
+        name: "Ora-Blend",
+        role: "vehicle",
+        quantity: 0,
+        unit: "mL",
+      },
+    ],
+    safety_profile: {
+      minSingleDoseMg: 0.5,
+      maxSingleDoseMg: 50,
+      maxDailyDoseMg: 150,
+      budRule: {
+        category: "aqueous",
+        hasStabilityData: false,
+      },
+    },
+    instructions:
+      "Generated formula pending pharmacist validation. Triturate API and qs with vehicle.",
+  };
+
+  const { data, error } = await supabase
+    .from("formulas")
+    .insert(generatedPayload)
+    .select("*")
+    .single();
+
+  if (error || !data) throw error ?? new Error("Failed to generate formula.");
+  return parseFormulaRow(data);
+}
+
+export async function getInventoryForIngredients(
+  supabase: SupabaseClient,
+  userId: string,
+  ingredientNames: string[],
+) {
+  if (!ingredientNames.length) return [];
+
+  const { data, error } = await supabase
+    .from("inventory_lots")
+    .select("ingredient_name, available_quantity, unit, expires_on, lot_number")
+    .eq("owner_id", userId)
+    .in("ingredient_name", ingredientNames);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: Record<string, unknown>) => {
+    return {
+      ingredientName: asString(row.ingredient_name),
+      availableQuantity: asNumber(row.available_quantity, 0),
+      unit: asString(row.unit, "mg"),
+      expiresOn: asString(row.expires_on),
+      lotNumber: asString(row.lot_number),
+    } satisfies InventoryLotSnapshot;
+  });
+}
+
+export async function updateJobState(
+  supabase: SupabaseClient,
+  params: {
+    jobId: string;
+    status?: JobStatus;
+    formulaId?: string | null;
+    iterationCount?: number;
+    lastError?: string | null;
+    pharmacistFeedback?: string | null;
+    completed?: boolean;
+  },
+) {
+  const payload: Record<string, unknown> = {};
+  if (params.status) payload.status = params.status;
+  if (params.formulaId !== undefined) payload.formula_id = params.formulaId;
+  if (params.iterationCount !== undefined) payload.iteration_count = params.iterationCount;
+  if (params.lastError !== undefined) payload.last_error = params.lastError;
+  if (params.pharmacistFeedback !== undefined) {
+    payload.pharmacist_feedback = params.pharmacistFeedback;
+  }
+  if (params.completed) {
+    payload.completed_at = new Date().toISOString();
+  }
+  payload.updated_at = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("compounding_jobs")
+    .update(payload)
+    .eq("id", params.jobId);
+  if (error) throw error;
+}
+
+export async function insertCalculationReport(
+  supabase: SupabaseClient,
+  params: {
+    ownerId: string;
+    jobId: string;
+    version: number;
+    context: JsonRecord;
+    report: JsonRecord;
+    hardChecks: JsonRecord;
+    aiReview: JsonRecord;
+    overallStatus: string;
+    isFinal?: boolean;
+  },
+) {
+  const { data, error } = await supabase
+    .from("calculation_reports")
+    .insert({
+      owner_id: params.ownerId,
+      job_id: params.jobId,
+      version: params.version,
+      context: params.context,
+      report: params.report,
+      hard_checks: params.hardChecks,
+      ai_review: params.aiReview,
+      overall_status: params.overallStatus,
+      is_final: Boolean(params.isFinal),
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) throw error ?? new Error("Failed to insert report.");
+  return asString(data.id);
+}
+
+export async function getLatestReportVersion(
+  supabase: SupabaseClient,
+  jobId: string,
+) {
+  const { data, error } = await supabase
+    .from("calculation_reports")
+    .select("version")
+    .eq("job_id", jobId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? asNumber(data.version, 0) : 0;
+}
+
+export async function writeAuditEvent(
+  supabase: SupabaseClient,
+  params: {
+    ownerId: string;
+    jobId?: string | null;
+    eventType: string;
+    eventPayload: JsonRecord;
+  },
+) {
+  const { error } = await supabase.from("audit_events").insert({
+    owner_id: params.ownerId,
+    job_id: params.jobId ?? null,
+    event_type: params.eventType,
+    event_payload: params.eventPayload,
+  });
+  if (error) throw error;
+}
+
+export async function saveFinalOutput(
+  supabase: SupabaseClient,
+  params: {
+    ownerId: string;
+    jobId: string;
+    approvedBy: string;
+    finalReport: JsonRecord;
+    labelPayload: JsonRecord;
+  },
+) {
+  const { error } = await supabase.from("final_outputs").upsert(
+    {
+      owner_id: params.ownerId,
+      job_id: params.jobId,
+      approved_by: params.approvedBy,
+      final_report: params.finalReport,
+      label_payload: params.labelPayload,
+      approved_at: new Date().toISOString(),
+    },
+    { onConflict: "job_id" },
+  );
+
+  if (error) throw error;
+}
+
+export async function insertPharmacistFeedback(
+  supabase: SupabaseClient,
+  params: {
+    ownerId: string;
+    jobId: string;
+    decision: "request_changes" | "reject" | "approve" | "note";
+    feedback: string;
+  },
+) {
+  const { error } = await supabase.from("pharmacist_feedback").insert({
+    owner_id: params.ownerId,
+    job_id: params.jobId,
+    decision: params.decision,
+    feedback: params.feedback,
+  });
+  if (error) throw error;
+}
+
+export async function getJobPresentationData(
+  supabase: SupabaseClient,
+  userId: string,
+  jobId: string,
+) {
+  const [context, reportsResult, feedbackResult, finalOutputResult, auditResult] =
+    await Promise.all([
+      getJobContext(supabase, userId, jobId),
+      supabase
+        .from("calculation_reports")
+        .select("id, version, overall_status, report, hard_checks, ai_review, created_at")
+        .eq("owner_id", userId)
+        .eq("job_id", jobId)
+        .order("version", { ascending: false }),
+      supabase
+        .from("pharmacist_feedback")
+        .select("id, decision, feedback, created_at")
+        .eq("owner_id", userId)
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("final_outputs")
+        .select("id, approved_at, final_report, label_payload")
+        .eq("owner_id", userId)
+        .eq("job_id", jobId)
+        .maybeSingle(),
+      supabase
+        .from("audit_events")
+        .select("id, event_type, event_payload, created_at")
+        .eq("owner_id", userId)
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+
+  if (reportsResult.error) throw reportsResult.error;
+  if (feedbackResult.error) throw feedbackResult.error;
+  if (finalOutputResult.error) throw finalOutputResult.error;
+  if (auditResult.error) throw auditResult.error;
+
+  const reports: CalculationReportRow[] = (reportsResult.data ?? []).map(
+    (row: Record<string, unknown>) => ({
+      id: asString(row.id),
+      version: asNumber(row.version, 1),
+      overallStatus: asString(row.overall_status),
+      report: asRecord(row.report),
+      hardChecks: asRecord(row.hard_checks),
+      aiReview: asRecord(row.ai_review),
+      createdAt: asString(row.created_at),
+    }),
+  );
+
+  const feedback: FeedbackRow[] = (feedbackResult.data ?? []).map(
+    (row: Record<string, unknown>) => ({
+      id: asString(row.id),
+      decision: asString(row.decision),
+      feedback: asString(row.feedback),
+      createdAt: asString(row.created_at),
+    }),
+  );
+
+  const finalOutput: FinalOutputRow | null = finalOutputResult.data
+    ? {
+        id: asString(finalOutputResult.data.id),
+        approvedAt: asString(finalOutputResult.data.approved_at),
+        finalReport: asRecord(finalOutputResult.data.final_report),
+        labelPayload: asRecord(finalOutputResult.data.label_payload),
+      }
+    : null;
+
+  const audit: AuditEventRow[] = (auditResult.data ?? []).map(
+    (row: Record<string, unknown>) => ({
+      id: asString(row.id),
+      eventType: asString(row.event_type),
+      eventPayload: asRecord(row.event_payload),
+      createdAt: asString(row.created_at),
+    }),
+  );
+
+  return { context, reports, feedback, finalOutput, audit };
+}
