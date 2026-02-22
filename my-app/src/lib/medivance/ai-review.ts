@@ -4,6 +4,7 @@ import type {
   CalculationResult,
   CheckStatus,
   HardCheckSummary,
+  MedicationReferenceSnapshot,
 } from "@/lib/medivance/types";
 
 interface ReviewInput {
@@ -11,6 +12,7 @@ interface ReviewInput {
   route: string;
   report: CalculationResult;
   hardSummary: HardCheckSummary;
+  referenceSnapshot: MedicationReferenceSnapshot;
 }
 
 function normalizeStatus(status: string): CheckStatus {
@@ -20,9 +22,49 @@ function normalizeStatus(status: string): CheckStatus {
   return "PASS";
 }
 
+function buildCitationQuality(snapshot: MedicationReferenceSnapshot) {
+  const hasRxNorm = snapshot.rxNormStatus === "ok" && Boolean(snapshot.rxNormId);
+  const hasOpenFda = snapshot.openFdaStatus === "ok" && snapshot.openFdaInteractionLabelCount > 0;
+  const hasOpenFdaNdc = snapshot.openFdaNdcStatus === "ok" && snapshot.openFdaNdcCount > 0;
+  const hasDailyMed = snapshot.dailyMedStatus === "ok" && Boolean(snapshot.dailyMedSetId);
+  const status: CheckStatus =
+    hasRxNorm && hasOpenFda && hasOpenFdaNdc && hasDailyMed ? "PASS" : "WARN";
+
+  const summary = [
+    hasRxNorm
+      ? `RxNav normalized to ${snapshot.rxNormName ?? snapshot.medicationName} (RxCUI ${snapshot.rxNormId}).`
+      : "RxNav did not return an RxCUI match.",
+    hasOpenFda
+      ? `openFDA returned ${snapshot.openFdaInteractionLabelCount} label(s) with drug interaction sections.`
+      : snapshot.openFdaStatus === "error"
+        ? "openFDA interaction lookup failed."
+        : "openFDA returned no matching interaction label records.",
+    hasOpenFdaNdc
+      ? `openFDA NDC directory returned ${snapshot.openFdaNdcCount} result(s).`
+      : snapshot.openFdaNdcStatus === "error"
+        ? "openFDA NDC directory lookup failed."
+        : "openFDA NDC directory returned no matching records.",
+    hasDailyMed
+      ? `DailyMed resolved SPL ${snapshot.dailyMedSetId}.`
+      : snapshot.dailyMedStatus === "error"
+        ? "DailyMed lookup failed."
+        : "DailyMed returned no SPL match.",
+  ];
+
+  if (snapshot.warnings.length) {
+    summary.push(`Notes: ${snapshot.warnings.join(" ")}`);
+  }
+
+  return {
+    status,
+    detail: summary.join(" "),
+  };
+}
+
 function fallbackReview(input: ReviewInput): AiReviewResult {
   const blocked = input.hardSummary.blockingIssues.length > 0;
   const sparseSteps = input.report.steps.length < 5;
+  const citationQuality = buildCitationQuality(input.referenceSnapshot);
 
   return {
     clinicalReasonableness: {
@@ -37,12 +79,10 @@ function fallbackReview(input: ReviewInput): AiReviewResult {
         ? "Preparation steps are minimal. Add order-of-addition and QC checkpoints."
         : "Preparation instructions include core compounding sequence and QC step.",
     },
-    citationQuality: {
-      status: "WARN",
-      detail:
-        "MVP mode: no external citation validation configured yet. Attach DrugBank/openFDA links when API keys are available.",
-    },
+    citationQuality,
     overall: blocked ? "FAIL" : sparseSteps ? "NEEDS_REVIEW" : "PASS",
+    citations: input.referenceSnapshot.citations,
+    externalWarnings: input.referenceSnapshot.warnings,
   };
 }
 
@@ -65,6 +105,8 @@ export async function runAiReview(input: ReviewInput): Promise<AiReviewResult> {
     return fallbackReview(input);
   }
 
+  const citationQuality = buildCitationQuality(input.referenceSnapshot);
+
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -78,13 +120,29 @@ export async function runAiReview(input: ReviewInput): Promise<AiReviewResult> {
           {
             role: "system",
             content:
-              "You are a pharmaceutical compounding safety reviewer. Return strict JSON with keys clinicalReasonableness, preparationCompleteness, citationQuality, overall. Never do arithmetic.",
+              "You are a pharmaceutical compounding safety reviewer. Return strict JSON with keys clinicalReasonableness, preparationCompleteness, overall. Never do arithmetic.",
           },
           {
             role: "user",
             content: `Review this report for clinical coherence and completeness.\nMedication: ${input.medicationName}\nRoute: ${input.route}\nReport: ${JSON.stringify(
               input.report,
-            )}\nHard checks: ${JSON.stringify(input.hardSummary.checks)}`,
+            )}\nHard checks: ${JSON.stringify(
+              input.hardSummary.checks,
+            )}\nExternal references summary: ${JSON.stringify({
+              rxNormStatus: input.referenceSnapshot.rxNormStatus,
+              rxNormId: input.referenceSnapshot.rxNormId,
+              rxNormName: input.referenceSnapshot.rxNormName,
+              openFdaStatus: input.referenceSnapshot.openFdaStatus,
+              openFdaInteractionLabelCount:
+                input.referenceSnapshot.openFdaInteractionLabelCount,
+              openFdaNdcStatus: input.referenceSnapshot.openFdaNdcStatus,
+              openFdaNdcCount: input.referenceSnapshot.openFdaNdcCount,
+              openFdaNdcProductNdc: input.referenceSnapshot.openFdaNdcProductNdc,
+              dailyMedStatus: input.referenceSnapshot.dailyMedStatus,
+              dailyMedSetId: input.referenceSnapshot.dailyMedSetId,
+              citations: input.referenceSnapshot.citations,
+              warnings: input.referenceSnapshot.warnings,
+            })}`,
           },
         ],
         temperature: 0.1,
@@ -115,7 +173,6 @@ export async function runAiReview(input: ReviewInput): Promise<AiReviewResult> {
       {}) as Record<string, string>;
     const preparationCompleteness = (clinical.preparationCompleteness ??
       {}) as Record<string, string>;
-    const citationQuality = (clinical.citationQuality ?? {}) as Record<string, string>;
 
     const overallRaw = String(clinical.overall ?? "NEEDS_REVIEW").toUpperCase();
     const overall: AiReviewResult["overall"] =
@@ -134,12 +191,10 @@ export async function runAiReview(input: ReviewInput): Promise<AiReviewResult> {
           preparationCompleteness.detail ??
           "LLM review returned no detail for preparation completeness.",
       },
-      citationQuality: {
-        status: normalizeStatus(citationQuality.status ?? "WARN"),
-        detail:
-          citationQuality.detail ?? "LLM review returned no citation quality detail.",
-      },
+      citationQuality,
       overall,
+      citations: input.referenceSnapshot.citations,
+      externalWarnings: input.referenceSnapshot.warnings,
     };
   } catch {
     return fallbackReview(input);

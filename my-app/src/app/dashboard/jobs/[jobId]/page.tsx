@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
@@ -7,6 +8,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { requireUser } from "@/lib/auth";
 import { getJobPresentationData } from "@/lib/medivance/db";
+import { parseSigningIntentCookie, SIGNING_INTENT_COOKIE } from "@/lib/medivance/signing";
 
 const dateTime = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -39,6 +41,51 @@ function extractChecks(payload: Record<string, unknown>) {
   });
 }
 
+function extractAiReview(payload: Record<string, unknown>) {
+  const checkKeys = [
+    "clinicalReasonableness",
+    "preparationCompleteness",
+    "citationQuality",
+  ];
+  const checks = checkKeys.map((key) => {
+    const raw =
+      payload[key] && typeof payload[key] === "object" && !Array.isArray(payload[key])
+        ? (payload[key] as Record<string, unknown>)
+        : {};
+
+    return {
+      key,
+      status: typeof raw.status === "string" ? raw.status : "WARN",
+      detail: typeof raw.detail === "string" ? raw.detail : "No detail provided.",
+    };
+  });
+
+  const rawCitations = Array.isArray(payload.citations) ? payload.citations : [];
+  const citations = rawCitations
+    .map((item) =>
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : {},
+    )
+    .filter((item) => typeof item.url === "string" && typeof item.title === "string")
+    .map((item) => ({
+      source: typeof item.source === "string" ? item.source : "reference",
+      title: item.title as string,
+      url: item.url as string,
+      detail: typeof item.detail === "string" ? item.detail : "",
+    }));
+
+  const externalWarnings = Array.isArray(payload.externalWarnings)
+    ? payload.externalWarnings.filter((value): value is string => typeof value === "string")
+    : [];
+
+  return {
+    checks,
+    citations,
+    externalWarnings,
+  };
+}
+
 function getToast(toast: string | undefined) {
   if (!toast) return null;
   const lower = toast.toLowerCase();
@@ -67,6 +114,10 @@ export default async function JobDetailsPage({
   }
 
   const { context, reports, feedback, finalOutput, audit } = data;
+  const cookieStore = await cookies();
+  const signingIntentRaw = cookieStore.get(SIGNING_INTENT_COOKIE)?.value;
+  const parsedIntent = parseSigningIntentCookie(signingIntentRaw);
+  const signingIntent = parsedIntent?.jobId === jobId ? parsedIntent : null;
   const latestReport = reports[0];
   const latestValues =
     latestReport && typeof latestReport.report === "object" ? latestReport.report : {};
@@ -74,6 +125,10 @@ export default async function JobDetailsPage({
     latestReport && typeof latestReport.hardChecks === "object"
       ? extractChecks(latestReport.hardChecks)
       : [];
+  const aiReview =
+    latestReport && typeof latestReport.aiReview === "object"
+      ? extractAiReview(latestReport.aiReview)
+      : { checks: [], citations: [], externalWarnings: [] };
   const toastMessage = getToast(toast);
 
   const { data: formulaData } = context.job.formulaId
@@ -150,7 +205,11 @@ export default async function JobDetailsPage({
           </p>
         </GlassCard>
 
-        <JobActionPanel jobId={jobId} jobStatus={context.job.status} />
+        <JobActionPanel
+          jobId={jobId}
+          jobStatus={context.job.status}
+          signingIntent={signingIntent}
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
@@ -200,6 +259,61 @@ export default async function JobDetailsPage({
                   </div>
                 ))}
               </div>
+
+              <div className="space-y-2">
+                <p className="summary-label">AI + External Review</p>
+                <div className="grid gap-2">
+                  {aiReview.checks.map((check) => (
+                    <div key={check.key} className="check-row">
+                      <p className="text-sm font-semibold text-slate-800">{formatStatus(check.key)}</p>
+                      <p className="text-xs text-slate-700">{check.detail}</p>
+                      <span
+                        className={
+                          check.status === "PASS"
+                            ? "check-pass"
+                            : check.status === "FAIL"
+                              ? "check-fail"
+                              : "check-warn"
+                        }
+                      >
+                        {check.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="summary-label">External References</p>
+                {aiReview.citations.length ? (
+                  <div className="grid gap-2">
+                    {aiReview.citations.map((citation) => (
+                      <a
+                        key={`${citation.source}:${citation.url}`}
+                        href={citation.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="timeline-row block"
+                      >
+                        <p className="text-sm font-semibold text-slate-800">{citation.title}</p>
+                        <p className="text-xs text-slate-600">{formatStatus(citation.source)}</p>
+                        {citation.detail ? (
+                          <p className="text-xs text-slate-700">{citation.detail}</p>
+                        ) : null}
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-700">
+                    No external citations attached for this run.
+                  </p>
+                )}
+                {aiReview.externalWarnings.length ? (
+                  <p className="text-xs text-amber-800">
+                    {aiReview.externalWarnings.join(" ")}
+                  </p>
+                ) : null}
+              </div>
             </>
           ) : (
             <p className="text-sm text-slate-700">
@@ -214,6 +328,13 @@ export default async function JobDetailsPage({
             <div className="space-y-3 rounded-2xl border border-white/60 bg-white/30 p-4">
               <p className="text-sm text-slate-700">
                 Approved {dateTime.format(new Date(finalOutput.approvedAt))}
+              </p>
+              <p className="text-xs text-slate-700">
+                Signed by {finalOutput.signerName} ({finalOutput.signerEmail}) •{" "}
+                {formatStatus(finalOutput.signatureMeaning)}
+              </p>
+              <p className="text-xs text-slate-600">
+                Signature hash: <span className="font-mono">{finalOutput.signatureHash.slice(0, 16)}...</span>
               </p>
               <p className="summary-label">Label Preview</p>
               <pre className="json-preview">{JSON.stringify(finalOutput.labelPayload, null, 2)}</pre>

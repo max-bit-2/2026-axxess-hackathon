@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 
+import { env } from "@/lib/env";
 import {
   applyDeterministicCorrections,
   calculateCompoundingReport,
@@ -10,7 +12,10 @@ import {
   type PreflightSummary,
 } from "@/lib/medivance/preflight";
 import { runAiReview } from "@/lib/medivance/ai-review";
+import { fetchExternalClinicalSafetySnapshot } from "@/lib/medivance/external-safety";
 import {
+  consumeSigningIntent,
+  consumeInventoryForJob,
   getInventoryForIngredients,
   getJobContext,
   getLatestReportVersion,
@@ -21,8 +26,15 @@ import {
   updateJobState,
   writeAuditEvent,
 } from "@/lib/medivance/db";
+import { fetchMedicationReferenceSnapshot } from "@/lib/medivance/references";
+import { normalizeSignatureMeaning } from "@/lib/medivance/signing";
 import { runHardChecks } from "@/lib/medivance/safety";
-import type { JobStatus } from "@/lib/medivance/types";
+import type {
+  AiReviewResult,
+  JobStatus,
+  MedicationReferenceSnapshot,
+  SignatureMeaning,
+} from "@/lib/medivance/types";
 
 const MAX_ITERATIONS = 3;
 
@@ -74,6 +86,61 @@ async function handlePreflightFailure(
   };
 }
 
+function buildExternalBlockingIssues(params: {
+  medicationName: string;
+  snapshot: MedicationReferenceSnapshot;
+}) {
+  const { medicationName, snapshot } = params;
+  const issues: string[] = [];
+
+  if (!env.failClosedExternalChecks) {
+    return issues;
+  }
+
+  if (snapshot.rxNormStatus === "error") {
+    issues.push(`RxNorm lookup failed for ${medicationName}.`);
+  } else if (snapshot.rxNormStatus === "missing") {
+    issues.push(`RxNorm lookup returned no medication match for ${medicationName}.`);
+  }
+  if (snapshot.openFdaStatus === "error") {
+    issues.push(`openFDA interaction lookup failed for ${medicationName}.`);
+  } else if (snapshot.openFdaStatus === "missing") {
+    issues.push(`openFDA interaction lookup returned no interaction labels for ${medicationName}.`);
+  }
+  if (snapshot.openFdaNdcStatus === "error") {
+    issues.push(`openFDA NDC lookup failed for ${medicationName}.`);
+  } else if (snapshot.openFdaNdcStatus === "missing") {
+    issues.push(`openFDA NDC lookup returned no NDC match for ${medicationName}.`);
+  }
+  if (snapshot.dailyMedStatus === "error") {
+    issues.push(`DailyMed lookup failed for ${medicationName}.`);
+  } else if (snapshot.dailyMedStatus === "missing") {
+    issues.push(`DailyMed lookup returned no SPL match for ${medicationName}.`);
+  }
+
+  return issues;
+}
+
+function makeSignatureHash(input: {
+  jobId: string;
+  approverId: string;
+  signerName: string;
+  signerEmail: string;
+  signatureMeaning: SignatureMeaning;
+  signedAt: string;
+}) {
+  const payload = [
+    input.jobId,
+    input.approverId,
+    input.signerName,
+    input.signerEmail,
+    input.signatureMeaning,
+    input.signedAt,
+  ].join("|");
+
+  return createHash("sha256").update(payload).digest("hex");
+}
+
 export async function runCompoundingPipeline(
   supabase: SupabaseClient,
   params: {
@@ -83,6 +150,14 @@ export async function runCompoundingPipeline(
   },
 ) {
   const context = await getJobContext(supabase, params.userId, params.jobId);
+
+  if (context.job.status === "approved") {
+    throw new Error("Approved jobs are immutable and cannot be reprocessed.");
+  }
+  if (context.job.status === "in_progress") {
+    throw new Error("Job is already in progress.");
+  }
+
   const intakeSummary = runIntakePreflight(context);
   if (intakeSummary.blockingIssues.length > 0) {
     return handlePreflightFailure(supabase, {
@@ -92,7 +167,6 @@ export async function runCompoundingPipeline(
       summary: intakeSummary,
     });
   }
-
   const formula = await resolveFormulaForPrescription(supabase, params.userId, context);
   const preCompoundingSummary = runPreCompoundingPreflight({
     context,
@@ -144,6 +218,16 @@ export async function runCompoundingPipeline(
     ingredientNames,
   );
   const latestVersion = await getLatestReportVersion(supabase, params.jobId);
+  const referenceSnapshot = await fetchMedicationReferenceSnapshot(
+    context.prescription.medicationName,
+  );
+  const externalSafetySnapshot = await fetchExternalClinicalSafetySnapshot(
+    context.prescription.medicationName,
+  );
+  const externalBlockingIssues = buildExternalBlockingIssues({
+    medicationName: context.prescription.medicationName,
+    snapshot: referenceSnapshot,
+  });
   let workingPrescription = {
     medicationName: context.prescription.medicationName,
     route: context.prescription.route,
@@ -157,8 +241,9 @@ export async function runCompoundingPipeline(
   let finalIssues: string[] = [];
   let finalWarnings: string[] = [...intakeSummary.warnings, ...preCompoundingSummary.warnings];
   let attempts = 0;
+  const maxIterations = externalBlockingIssues.length > 0 ? 1 : MAX_ITERATIONS;
 
-  for (let attempt = 1; attempt <= MAX_ITERATIONS; attempt += 1) {
+  for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
     attempts = attempt;
 
     const calculatedReport = calculateCompoundingReport({
@@ -170,29 +255,62 @@ export async function runCompoundingPipeline(
     });
 
     const hardSummary = runHardChecks({
+      medicationName: context.prescription.medicationName,
       result: calculatedReport,
       allergies: context.patient.allergies,
       formulaSafety: formula.safetyProfile,
       ingredients: ingredientNames,
       inventoryLots,
+      patientWeightKg: context.patient.weightKg,
+      currentMedications: context.patient.currentMedications,
+      externalSafetySnapshot,
+      failClosedExternalChecks: env.failClosedExternalChecks,
     });
 
-    const aiReview = await runAiReview({
-      medicationName: context.prescription.medicationName,
-      route: context.prescription.route,
-      report: calculatedReport,
-      hardSummary,
-    });
+    const canRunAiReview =
+      hardSummary.blockingIssues.length === 0 && externalBlockingIssues.length === 0;
+    const aiReview: AiReviewResult = canRunAiReview
+      ? await runAiReview({
+          medicationName: context.prescription.medicationName,
+          route: context.prescription.route,
+          report: calculatedReport,
+          hardSummary,
+          referenceSnapshot,
+        })
+      : {
+          clinicalReasonableness: {
+            status: "WARN",
+            detail:
+              "AI review skipped because deterministic hard checks returned blocking issues.",
+          },
+          preparationCompleteness: {
+            status: "WARN",
+            detail:
+              "AI review skipped because deterministic hard checks returned blocking issues.",
+          },
+          citationQuality: {
+            status: "WARN",
+            detail:
+              "AI review skipped because deterministic hard checks returned blocking issues.",
+          },
+          overall: "FAIL",
+          citations: referenceSnapshot.citations,
+          externalWarnings: referenceSnapshot.warnings,
+        };
 
-    const blockingIssues = [...hardSummary.blockingIssues];
-    if (aiReview.overall === "FAIL") {
+    const blockingIssues = [...hardSummary.blockingIssues, ...externalBlockingIssues];
+    if (canRunAiReview && aiReview.overall === "FAIL") {
       blockingIssues.push(
         `AI review failed: ${aiReview.clinicalReasonableness.detail}`,
       );
     }
 
-    const warnings = [...hardSummary.warnings, ...intakeSummary.warnings, ...preCompoundingSummary.warnings];
-    if (aiReview.overall === "NEEDS_REVIEW") {
+    const warnings = [
+      ...hardSummary.warnings,
+      ...intakeSummary.warnings,
+      ...preCompoundingSummary.warnings,
+    ];
+    if (canRunAiReview && aiReview.overall === "NEEDS_REVIEW") {
       warnings.push(
         `AI review requires attention: ${aiReview.preparationCompleteness.detail}`,
       );
@@ -286,6 +404,13 @@ export async function approveCompoundingJob(
     jobId: string;
     approverId: string;
     note: string;
+    signerName: string;
+    signerEmail: string;
+    signatureMeaning: string;
+    signatureAttestation: boolean;
+    signaturePin: string;
+    signingIntentId: string;
+    signingChallengeCode: string;
   },
 ) {
   const note = params.note.trim();
@@ -297,6 +422,36 @@ export async function approveCompoundingJob(
   if (context.job.status !== "verified") {
     throw new Error("Only verified jobs can be approved.");
   }
+  if (!params.signatureAttestation) {
+    throw new Error("Electronic signature attestation is required.");
+  }
+
+  const signerName = params.signerName.trim();
+  const signerEmail = params.signerEmail.trim().toLowerCase();
+  if (signerName.length < 2) {
+    throw new Error("Signer name is required for electronic signature.");
+  }
+  if (!signerEmail.includes("@")) {
+    throw new Error("Signer email is required for electronic signature.");
+  }
+  const signatureMeaning = normalizeSignatureMeaning(params.signatureMeaning);
+  const signaturePin = params.signaturePin.trim();
+  const signingIntentId = params.signingIntentId.trim();
+  const signingChallengeCode = params.signingChallengeCode.trim();
+  if (!signaturePin) {
+    throw new Error("Signature PIN is required.");
+  }
+  if (!signingIntentId || !signingChallengeCode) {
+    throw new Error("Signing challenge is required. Generate a new challenge.");
+  }
+
+  await consumeSigningIntent(supabase, {
+    intentId: signingIntentId,
+    jobId: params.jobId,
+    signatureMeaning,
+    challengeCode: signingChallengeCode,
+    pin: signaturePin,
+  });
 
   const { data: latestReportData, error: reportError } = await supabase
     .from("calculation_reports")
@@ -311,10 +466,43 @@ export async function approveCompoundingJob(
     throw reportError ?? new Error("No report found for approval.");
   }
 
+  const { data: formulaData, error: formulaError } = context.job.formulaId
+    ? await supabase
+        .from("formulas")
+        .select(
+          "id, name, source, instructions, ingredient_profile, safety_profile, equipment, quality_control, container_closure, labeling_requirements, bud_rationale, reference_sources",
+        )
+        .eq("owner_id", params.userId)
+        .eq("id", context.job.formulaId)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  if (formulaError) {
+    throw formulaError;
+  }
+
   const report = toRecord(latestReportData.report);
   const budDate = String(report.budDateIso ?? "");
   const concentration = Number(report.finalConcentrationMgPerMl ?? 0);
   const volume = Number(report.finalVolumeMl ?? 0);
+  const signedAt = nowIso();
+  const signatureStatement = `${signerName} (${signerEmail}) electronically signed this record as ${signatureMeaning.replaceAll("_", " ")} on ${signedAt}.`;
+  const signatureHash = makeSignatureHash({
+    jobId: params.jobId,
+    approverId: params.approverId,
+    signerName,
+    signerEmail,
+    signatureMeaning,
+    signedAt,
+  });
+
+  const inventoryConsumption = await consumeInventoryForJob(supabase, {
+    ownerId: params.userId,
+    jobId: params.jobId,
+  });
+  const consumptionItems = Array.isArray(inventoryConsumption.items)
+    ? inventoryConsumption.items
+    : [];
 
   const labelPayload = {
     patient: context.patient.fullName,
@@ -324,13 +512,45 @@ export async function approveCompoundingJob(
     quantityMl: volume,
     beyondUseDate: budDate,
     storage: "Refrigerate. Shake well.",
-    approvedAt: nowIso(),
+    approvedAt: signedAt,
+    signatureMeaning,
+    signatureHash,
+    lotConsumption: consumptionItems,
   };
 
   const finalReport = {
     approvedBy: params.approverId,
-    approvedAt: nowIso(),
+    approvedAt: signedAt,
+    signature: {
+      signerName,
+      signerEmail,
+      signatureMeaning,
+      signatureStatement,
+      signatureHash,
+    },
     context,
+    masterFormulationRecord: formulaData
+      ? {
+          id: formulaData.id,
+          name: formulaData.name,
+          source: formulaData.source,
+          instructions: formulaData.instructions,
+          ingredientProfile: formulaData.ingredient_profile,
+          safetyProfile: formulaData.safety_profile,
+          equipment: formulaData.equipment ?? [],
+          qualityControl: formulaData.quality_control ?? [],
+          containerClosure: formulaData.container_closure ?? null,
+          labelingRequirements: formulaData.labeling_requirements ?? null,
+          budRationale: formulaData.bud_rationale ?? null,
+          references: formulaData.reference_sources ?? [],
+        }
+      : null,
+    compoundingRecord: {
+      jobId: params.jobId,
+      reportVersionId: latestReportData.id,
+      report,
+      inventoryConsumption,
+    },
     report,
     pharmacistNote: note,
   };
@@ -339,14 +559,14 @@ export async function approveCompoundingJob(
     ownerId: params.userId,
     jobId: params.jobId,
     approvedBy: params.approverId,
+    signerName,
+    signerEmail,
+    signatureMeaning,
+    signatureStatement,
+    signatureHash,
     finalReport,
     labelPayload,
   });
-
-  await supabase
-    .from("calculation_reports")
-    .update({ is_final: true })
-    .eq("id", latestReportData.id);
 
   await updateJobState(supabase, {
     jobId: params.jobId,
@@ -368,8 +588,13 @@ export async function approveCompoundingJob(
     eventType: "job.approved",
     eventPayload: {
       approvedBy: params.approverId,
+      signerName,
+      signerEmail,
+      signatureMeaning,
+      signatureHash,
       note,
-      timestamp: nowIso(),
+      timestamp: signedAt,
+      inventoryConsumptionCount: consumptionItems.length,
     },
   });
 }
@@ -382,6 +607,11 @@ export async function rejectCompoundingJob(
     feedback: string;
   },
 ) {
+  const context = await getJobContext(supabase, params.userId, params.jobId);
+  if (context.job.status === "approved") {
+    throw new Error("Approved jobs are immutable and cannot be rejected.");
+  }
+
   const feedback = params.feedback.trim();
   if (!feedback) {
     throw new Error("Rejection feedback is required.");

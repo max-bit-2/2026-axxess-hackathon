@@ -5,8 +5,10 @@ import type {
   FormulaSafetyProfile,
   Ingredient,
   JobStatus,
+  SignatureMeaning,
 } from "@/lib/medivance/types";
 import type { InventoryLotSnapshot } from "@/lib/medivance/safety";
+import { normalizeSignatureMeaning } from "@/lib/medivance/signing";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -53,6 +55,12 @@ export interface ResolvedFormula {
   safetyProfile: FormulaSafetyProfile;
   instructions: string;
   budRule: { category: "aqueous" | "non_aqueous"; hasStabilityData: boolean; stabilityDays?: number };
+  equipment: string[];
+  qualityControl: string[];
+  containerClosure: string | null;
+  labelingRequirements: string | null;
+  budRationale: string | null;
+  references: Array<Record<string, unknown>>;
 }
 
 export interface JobContext {
@@ -83,6 +91,7 @@ export interface JobContext {
     fullName: string;
     weightKg: number;
     allergies: string[];
+    currentMedications: string[];
     notes: string | null;
   };
 }
@@ -107,6 +116,11 @@ export interface FeedbackRow {
 export interface FinalOutputRow {
   id: string;
   approvedAt: string;
+  signerName: string;
+  signerEmail: string;
+  signatureMeaning: SignatureMeaning;
+  signatureStatement: string;
+  signatureHash: string;
   finalReport: JsonRecord;
   labelPayload: JsonRecord;
 }
@@ -116,6 +130,14 @@ export interface AuditEventRow {
   eventType: string;
   eventPayload: JsonRecord;
   createdAt: string;
+}
+
+export interface SigningIntentPayload {
+  intentId: string;
+  challengeCode: string;
+  signatureMeaning: SignatureMeaning;
+  issuedAt: string;
+  expiresAt: string;
 }
 
 export async function ensureDemoData(
@@ -172,9 +194,23 @@ export async function ensureDemoData(
       maxSingleDoseMg: 30,
       maxDailyDoseMg: 90,
       incompatibilities: [["baclofen", "ethanol"]],
+      budRule: {
+        category: "aqueous",
+        hasStabilityData: false,
+      },
     },
     instructions:
       "Triturate baclofen to a fine powder, wet with glycerin, and qs with Ora-Blend.",
+    equipment: ["Class A balance", "Mortar and pestle", "Graduated cylinder"],
+    quality_control: ["Appearance check", "Volume verification", "Label verification"],
+    container_closure: "Amber PET bottle with child-resistant cap.",
+    labeling_requirements: "Shake well. Refrigerate. Keep out of reach of children.",
+    bud_rationale:
+      "Default USP <795> aqueous BUD applied due to no supporting stability study.",
+    reference_sources: [
+      { source: "internal", detail: "MFR-BCF-10-PO" },
+      { source: "usp", detail: "<795> default nonsterile guidance" },
+    ],
   };
 
   const patientSpecificFormula = {
@@ -202,9 +238,23 @@ export async function ensureDemoData(
       minSingleDoseMg: 2,
       maxSingleDoseMg: 40,
       maxDailyDoseMg: 80,
+      budRule: {
+        category: "aqueous",
+        hasStabilityData: false,
+      },
     },
     instructions:
       "Suspend omeprazole powder in sodium bicarbonate vehicle. Protect from light.",
+    equipment: ["Class A balance", "Mortar and pestle", "Amber bottle"],
+    quality_control: ["Visual check for clumping", "pH spot check", "Final volume verification"],
+    container_closure: "Amber oral suspension bottle.",
+    labeling_requirements: "Shake well. Refrigerate. Discard after BUD.",
+    bud_rationale:
+      "Patient-specific nonsterile aqueous preparation with no additional stability data.",
+    reference_sources: [
+      { source: "internal", detail: "MFR-OME-2-PO-AVERY" },
+      { source: "literature", detail: "Omeprazole bicarbonate suspension pediatric practice notes" },
+    ],
   };
 
   const { error: formulaError } = await supabase
@@ -318,26 +368,34 @@ export async function getQueueItems(
 
   if (error) throw error;
 
-  return (data ?? []).map((row: Record<string, unknown>) => {
-    const prescription = asRecord(row.prescriptions);
-    const patient = asRecord(prescription.patients);
-    const firstName = asString(patient.first_name, "Unknown");
-    const lastName = asString(patient.last_name, "Patient");
+  const todayUtc = new Date().toISOString().slice(0, 10);
 
-    return {
-      jobId: asString(row.id),
-      status: asString(row.status, "queued") as JobStatus,
-      priority: asNumber(row.priority, 2),
-      iterationCount: asNumber(row.iteration_count, 0),
-      lastError: row.last_error ? asString(row.last_error) : null,
-      createdAt: asString(row.created_at),
-      medicationName: asString(prescription.medication_name, "Unknown"),
-      route: asString(prescription.route, "PO"),
-      dueAt: asString(prescription.due_at),
-      patientId: asString(prescription.patient_id),
-      patientName: `${firstName} ${lastName}`,
-    } satisfies QueueItem;
-  });
+  return (data ?? [])
+    .map((row: Record<string, unknown>) => {
+      const prescription = asRecord(row.prescriptions);
+      const patient = asRecord(prescription.patients);
+      const firstName = asString(patient.first_name, "Unknown");
+      const lastName = asString(patient.last_name, "Patient");
+      const dueAt = asString(prescription.due_at);
+
+      return {
+        jobId: asString(row.id),
+        status: asString(row.status, "queued") as JobStatus,
+        priority: asNumber(row.priority, 2),
+        iterationCount: asNumber(row.iteration_count, 0),
+        lastError: row.last_error ? asString(row.last_error) : null,
+        createdAt: asString(row.created_at),
+        medicationName: asString(prescription.medication_name, "Unknown"),
+        route: asString(prescription.route, "PO"),
+        dueAt,
+        patientId: asString(prescription.patient_id),
+        patientName: `${firstName} ${lastName}`,
+      } satisfies QueueItem;
+    })
+    .filter((item) => {
+      if (!item.dueAt) return false;
+      return item.dueAt.slice(0, 10) === todayUtc;
+    });
 }
 
 export async function getJobContext(
@@ -388,6 +446,26 @@ export async function getJobContext(
   const rowData = asRecord(data);
   const prescription = asRecord(rowData.prescriptions);
   const patient = asRecord(prescription.patients);
+  const patientId = asString(prescription.patient_id);
+  const prescriptionId = asString(prescription.id);
+
+  const { data: concurrentMedicationRows, error: concurrentMedicationError } = await supabase
+    .from("prescriptions")
+    .select("medication_name")
+    .eq("owner_id", userId)
+    .eq("patient_id", patientId)
+    .neq("id", prescriptionId)
+    .order("created_at", { ascending: false })
+    .limit(25);
+
+  if (concurrentMedicationError) throw concurrentMedicationError;
+  const currentMedications = Array.from(
+    new Set(
+      (concurrentMedicationRows ?? [])
+        .map((row: Record<string, unknown>) => asString(row.medication_name).trim())
+        .filter((medicationName) => medicationName.length > 0),
+    ),
+  );
 
   return {
     job: {
@@ -419,6 +497,7 @@ export async function getJobContext(
       fullName: `${asString(patient.first_name)} ${asString(patient.last_name)}`,
       weightKg: asNumber(patient.weight_kg, 0),
       allergies: asArray<string>(patient.allergies, []),
+      currentMedications,
       notes: patient.notes ? asString(patient.notes) : null,
     },
   } satisfies JobContext;
@@ -429,6 +508,7 @@ function parseFormulaRow(rowValue: unknown): ResolvedFormula {
   const safetyRecord = asRecord(row.safety_profile, {});
   const budCandidate = asRecord(safetyRecord.budRule, {});
   const category = asString(budCandidate.category, "aqueous");
+  const references = asArray<Record<string, unknown>>(row.reference_sources, []);
 
   return {
     id: asString(row.id),
@@ -455,6 +535,14 @@ function parseFormulaRow(rowValue: unknown): ResolvedFormula {
           ? asNumber(budCandidate.stabilityDays, 14)
           : undefined,
     },
+    equipment: asArray<string>(row.equipment, []),
+    qualityControl: asArray<string>(row.quality_control, []),
+    containerClosure: row.container_closure ? asString(row.container_closure) : null,
+    labelingRequirements: row.labeling_requirements
+      ? asString(row.labeling_requirements)
+      : null,
+    budRationale: row.bud_rationale ? asString(row.bud_rationale) : null,
+    references,
   };
 }
 
@@ -542,6 +630,18 @@ export async function resolveFormulaForPrescription(
     },
     instructions:
       "Generated formula pending pharmacist validation. Triturate API and qs with vehicle.",
+    equipment: ["Class A balance", "Mortar and pestle", "Graduated cylinder"],
+    quality_control: ["Appearance check", "Final volume check", "Label check"],
+    container_closure: "Amber bottle with child-resistant cap.",
+    labeling_requirements: "Shake well before use. Store as directed on final label.",
+    bud_rationale:
+      "Generated formula defaults to USP <795> aqueous baseline pending pharmacist validation.",
+    reference_sources: [
+      {
+        source: "system",
+        detail: "Auto-generated fallback MFR template",
+      },
+    ],
   };
 
   const { data, error } = await supabase
@@ -686,23 +786,144 @@ export async function saveFinalOutput(
     ownerId: string;
     jobId: string;
     approvedBy: string;
+    signerName: string;
+    signerEmail: string;
+    signatureMeaning: SignatureMeaning;
+    signatureStatement: string;
+    signatureHash: string;
     finalReport: JsonRecord;
     labelPayload: JsonRecord;
   },
 ) {
-  const { error } = await supabase.from("final_outputs").upsert(
-    {
-      owner_id: params.ownerId,
-      job_id: params.jobId,
-      approved_by: params.approvedBy,
-      final_report: params.finalReport,
-      label_payload: params.labelPayload,
-      approved_at: new Date().toISOString(),
-    },
-    { onConflict: "job_id" },
-  );
+  const { error } = await supabase.from("final_outputs").insert({
+    owner_id: params.ownerId,
+    job_id: params.jobId,
+    approved_by: params.approvedBy,
+    signer_name: params.signerName,
+    signer_email: params.signerEmail,
+    signature_meaning: params.signatureMeaning,
+    signature_statement: params.signatureStatement,
+    signature_hash: params.signatureHash,
+    final_report: params.finalReport,
+    label_payload: params.labelPayload,
+    approved_at: new Date().toISOString(),
+    locked_at: new Date().toISOString(),
+  });
 
   if (error) throw error;
+}
+
+export async function consumeInventoryForJob(
+  supabase: SupabaseClient,
+  params: {
+    ownerId: string;
+    jobId: string;
+  },
+) {
+  const { data, error } = await supabase.rpc("consume_inventory_for_job", {
+    p_owner_id: params.ownerId,
+    p_job_id: params.jobId,
+  });
+
+  if (error) throw error;
+  return asRecord(data);
+}
+
+export async function setSignaturePin(
+  supabase: SupabaseClient,
+  params: {
+    pin: string;
+  },
+) {
+  const { data, error } = await supabase.rpc("set_signature_pin", {
+    p_pin: params.pin,
+  });
+
+  if (error) throw error;
+  return asRecord(data);
+}
+
+export async function issueSigningIntent(
+  supabase: SupabaseClient,
+  params: {
+    jobId: string;
+    signatureMeaning: SignatureMeaning;
+  },
+) {
+  const { data, error } = await supabase.rpc("issue_signing_intent", {
+    p_job_id: params.jobId,
+    p_signature_meaning: params.signatureMeaning,
+  });
+
+  if (error) throw error;
+  const payload = asRecord(data);
+  const ok = payload.ok === true;
+  if (!ok) {
+    throw new Error(asString(payload.reason, "Failed to issue signing intent."));
+  }
+
+  return {
+    intentId: asString(payload.intentId),
+    challengeCode: asString(payload.challengeCode),
+    signatureMeaning: normalizeSignatureMeaning(asString(payload.signatureMeaning)),
+    issuedAt: asString(payload.issuedAt),
+    expiresAt: asString(payload.expiresAt),
+  } satisfies SigningIntentPayload;
+}
+
+export async function consumeSigningIntent(
+  supabase: SupabaseClient,
+  params: {
+    intentId: string;
+    jobId: string;
+    signatureMeaning: SignatureMeaning;
+    challengeCode: string;
+    pin: string;
+  },
+) {
+  const { data, error } = await supabase.rpc("consume_signing_intent", {
+    p_intent_id: params.intentId,
+    p_job_id: params.jobId,
+    p_challenge_code: params.challengeCode,
+    p_pin: params.pin,
+    p_signature_meaning: params.signatureMeaning,
+  });
+
+  if (error) throw error;
+  const payload = asRecord(data);
+  if (payload.ok !== true) {
+    const reason = asString(payload.reason, "signature_verification_failed");
+    if (reason === "pin_failed") {
+      const pinResult = asRecord(payload.pinResult);
+      const pinReason = asString(pinResult.reason, "invalid_pin");
+      if (pinReason === "locked") {
+        throw new Error(
+          `Signature PIN is temporarily locked until ${asString(pinResult.lockedUntil, "later")}.`,
+        );
+      }
+      if (pinReason === "pin_not_set") {
+        throw new Error("Signature PIN is not set. Set your signature PIN before approval.");
+      }
+      throw new Error("Signature PIN is invalid.");
+    }
+
+    if (reason === "intent_expired") {
+      throw new Error("Signing challenge expired. Generate a new one.");
+    }
+    if (reason === "intent_already_used") {
+      throw new Error("Signing challenge already used. Generate a new one.");
+    }
+    if (reason === "challenge_mismatch") {
+      throw new Error("Signing challenge code is incorrect.");
+    }
+    if (reason === "job_not_verified") {
+      throw new Error("Job is no longer in verified status.");
+    }
+
+    throw new Error(`Signature verification failed: ${reason}.`);
+  }
+
+  return payload;
 }
 
 export async function insertPharmacistFeedback(
@@ -745,7 +966,9 @@ export async function getJobPresentationData(
         .order("created_at", { ascending: false }),
       supabase
         .from("final_outputs")
-        .select("id, approved_at, final_report, label_payload")
+        .select(
+          "id, approved_at, signer_name, signer_email, signature_meaning, signature_statement, signature_hash, final_report, label_payload",
+        )
         .eq("owner_id", userId)
         .eq("job_id", jobId)
         .maybeSingle(),
@@ -788,6 +1011,13 @@ export async function getJobPresentationData(
     ? {
         id: asString(finalOutputResult.data.id),
         approvedAt: asString(finalOutputResult.data.approved_at),
+        signerName: asString(finalOutputResult.data.signer_name),
+        signerEmail: asString(finalOutputResult.data.signer_email),
+        signatureMeaning: asString(
+          finalOutputResult.data.signature_meaning,
+        ) as SignatureMeaning,
+        signatureStatement: asString(finalOutputResult.data.signature_statement),
+        signatureHash: asString(finalOutputResult.data.signature_hash),
         finalReport: asRecord(finalOutputResult.data.final_report),
         labelPayload: asRecord(finalOutputResult.data.label_payload),
       }
