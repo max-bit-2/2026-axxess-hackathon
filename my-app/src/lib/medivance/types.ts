@@ -9,6 +9,8 @@ export type JobStatus =
 export type FormulaSource = "patient" | "company" | "generated";
 
 export type CheckStatus = "PASS" | "FAIL" | "WARN";
+export type ReferenceStatus = "ok" | "missing" | "error";
+export type SignatureMeaning = "reviewed_and_approved" | "compounded_by" | "verified_by";
 
 export type IngredientUnit = "mg" | "g" | "mL";
 
@@ -78,9 +80,59 @@ export interface CheckResult {
   detail: string;
 }
 
+export interface DoseRangeConstraints {
+  maxSingleDoseMg: number | null;
+  maxDailyDoseMg: number | null;
+  maxDailyDoseMgPerKg: number | null;
+}
+
+export interface ExternalClinicalSafetySnapshot {
+  medicationName: string;
+  status: ReferenceStatus;
+  sourceUrl: string | null;
+  setId: string | null;
+  doseText: string;
+  pediatricText: string;
+  interactionsText: string;
+  contraindicationsText: string;
+  warningsText: string;
+  extractionWarnings: string[];
+}
+
+export type MedicationCitationSource = "openfda" | "rxnav" | "dailymed";
+
+export interface MedicationCitation {
+  source: MedicationCitationSource;
+  title: string;
+  url: string;
+  detail?: string;
+}
+
+export interface MedicationReferenceSnapshot {
+  medicationName: string;
+  rxNormStatus: ReferenceStatus;
+  rxNormId: string | null;
+  rxNormName: string | null;
+  openFdaStatus: ReferenceStatus;
+  openFdaInteractionLabelCount: number;
+  openFdaSampleSetId: string | null;
+  openFdaNdcStatus: ReferenceStatus;
+  openFdaNdcCount: number;
+  openFdaNdcProductNdc: string | null;
+  dailyMedStatus: ReferenceStatus;
+  dailyMedSetId: string | null;
+  dailyMedTitle: string | null;
+  dailyMedPublishedDate: string | null;
+  citations: MedicationCitation[];
+  warnings: string[];
+}
+
 export interface HardChecks {
   doseRange: CheckResult;
   allergyCrosscheck: CheckResult;
+  allergyCrossSensitivity: CheckResult;
+  drugInteractions: CheckResult;
+  externalDoseRange: CheckResult;
   unitsConsistency: CheckResult;
   budValidity: CheckResult;
   inventoryAvailability: CheckResult;
@@ -99,4 +151,6 @@ export interface AiReviewResult {
   preparationCompleteness: CheckResult;
   citationQuality: CheckResult;
   overall: "PASS" | "FAIL" | "NEEDS_REVIEW";
+  citations: MedicationCitation[];
+  externalWarnings: string[];
 }

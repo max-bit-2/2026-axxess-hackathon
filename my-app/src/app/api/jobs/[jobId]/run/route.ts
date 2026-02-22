@@ -38,7 +38,7 @@ export async function POST(
     const message =
       result.status === "verified"
         ? "Verification complete. Job is ready for pharmacist approval."
-        : "Pipeline ran 3 iterations and escalated to pharmacist review.";
+        : `Pipeline ran ${result.attempts} iteration(s) and escalated to pharmacist review.`;
     return buildRedirect(request, jobId, message);
   } catch (error) {
     const message =

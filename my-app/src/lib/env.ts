@@ -6,9 +6,12 @@ export const env = {
   openAiApiKey: process.env.OPENAI_API_KEY ?? "",
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
-  drugbankApiKey: process.env.DRUGBANK_API_KEY ?? "",
   openFdaApiKey: process.env.OPENFDA_API_KEY ?? "",
   rxNavBaseUrl: process.env.RXNAV_BASE_URL ?? "https://rxnav.nlm.nih.gov/REST",
+  dailyMedBaseUrl:
+    process.env.DAILYMED_BASE_URL ?? "https://dailymed.nlm.nih.gov/dailymed/services/v2",
+  failClosedExternalChecks:
+    (process.env.FAIL_CLOSED_EXTERNAL_CHECKS ?? "true").toLowerCase() !== "false",
 };
 
 export function hasSupabaseEnv() {

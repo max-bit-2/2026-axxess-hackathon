@@ -10,9 +10,17 @@ Next.js + Supabase MVP for pharmaceutical compounding workflow:
   3. Generated formula
 - Deterministic calculation engine (no LLM arithmetic)
 - Hard safety checks + AI supplementary review
+- AI review is hard-gated and only runs after deterministic hard checks pass
+- External deterministic hard checks via openFDA labels:
+  - Drug-drug interaction term matching against concurrent patient meds
+  - Numeric dose-range extraction (mg/dose, mg/day, mg/kg/day)
+  - Allergy cross-sensitivity matching using label contraindications/warnings
 - 3-iteration verifier loop with pharmacist escalation
 - Pharmacist approve/reject actions
+- Part 11-style electronic signature attestation on approval
 - Final label payload + immutable audit trail records
+- Idempotent inventory consumption on approval
+- Part 11 strict signing flow (session + signature PIN + one-time signing challenge)
 
 ## Stack
 
@@ -55,6 +63,9 @@ Migrations are in `supabase/migrations`:
 - `202602220001_medivance_mvp_schema.sql`
 - `202602220002_queue_trigger.sql`
 - `202602220003_feedback_table.sql`
+- `202602220004_schema_hardening_indexes.sql`
+- `202602220005_compliance_locking_and_inventory.sql`
+- `202602220006_part11_signature_pin_and_intents.sql`
 
 Applied tables include:
 
@@ -68,8 +79,21 @@ Applied tables include:
 - `pharmacist_feedback`
 - `final_outputs`
 - `audit_events`
+- `inventory_consumptions`
+- `signing_intents`
 
 All core tables use RLS scoped to `auth.uid()`.
+Immutable tables (`calculation_reports`, `final_outputs`, `audit_events`) are insert/select only.
+
+## Signing Flow
+
+1. Pharmacist sets/updates signature PIN (`/api/signature/pin`).
+2. Pharmacist generates one-time signing challenge (`/api/jobs/[jobId]/signing-intent`).
+3. Approval requires:
+   - Challenge code re-entry
+   - Signature PIN verification
+   - Signature meaning
+   - Attestation checkbox
 
 ## Key Routes
 

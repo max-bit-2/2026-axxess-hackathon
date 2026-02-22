@@ -1,5 +1,10 @@
+import {
+  buildMissingExternalClinicalSafetySnapshot,
+  evaluateExternalClinicalChecks,
+} from "./external-safety";
 import type {
   CalculationResult,
+  ExternalClinicalSafetySnapshot,
   FormulaSafetyProfile,
   HardCheckSummary,
   IngredientUnit,
@@ -26,13 +31,25 @@ function toMg(quantity: number, unit: string) {
 }
 
 export function runHardChecks(params: {
+  medicationName?: string;
   result: CalculationResult;
   allergies: string[];
   formulaSafety: FormulaSafetyProfile;
   ingredients: string[];
   inventoryLots: InventoryLotSnapshot[];
+  patientWeightKg?: number;
+  currentMedications?: string[];
+  externalSafetySnapshot?: ExternalClinicalSafetySnapshot;
+  failClosedExternalChecks?: boolean;
 }) {
   const { result, allergies, formulaSafety, ingredients, inventoryLots } = params;
+  const patientWeightKg = params.patientWeightKg ?? 0;
+  const currentMedications = params.currentMedications ?? [];
+  const medicationName = params.medicationName ?? (ingredients[0] ?? "unknown");
+  const externalSafetySnapshot =
+    params.externalSafetySnapshot ??
+    buildMissingExternalClinicalSafetySnapshot(medicationName);
+  const failClosedExternalChecks = params.failClosedExternalChecks ?? false;
   const blockingIssues: string[] = [];
   const warnings: string[] = [];
 
@@ -76,15 +93,20 @@ export function runHardChecks(params: {
     );
   }
 
-  const requiredByIngredient = new Map<string, { quantity: number; unit: string }>();
+  const requiredByIngredient = new Map<
+    string,
+    { quantity: number; unit: string; displayName: string }
+  >();
   for (const ingredient of result.ingredients) {
     requiredByIngredient.set(normalize(ingredient.name), {
       quantity: ingredient.requiredAmount,
       unit: ingredient.unit,
+      displayName: ingredient.name,
     });
   }
 
   let inventoryShortages = 0;
+  const lowStockIngredients: string[] = [];
   for (const [ingredientName, requirement] of requiredByIngredient.entries()) {
     const lots = inventoryLots.filter(
       (lot) => normalize(lot.ingredientName) === ingredientName,
@@ -102,6 +124,8 @@ export function runHardChecks(params: {
 
       if (totalAvailableMl < requirement.quantity) {
         inventoryShortages += 1;
+      } else if (totalAvailableMl < requirement.quantity * 1.25) {
+        lowStockIngredients.push(requirement.displayName);
       }
       continue;
     }
@@ -113,11 +137,18 @@ export function runHardChecks(params: {
 
     if (totalAvailableMg < requiredMg) {
       inventoryShortages += 1;
+    } else if (totalAvailableMg < requiredMg * 1.25) {
+      lowStockIngredients.push(requirement.displayName);
     }
   }
 
   if (inventoryShortages > 0) {
     blockingIssues.push(`Inventory shortage on ${inventoryShortages} required ingredient(s).`);
+  }
+  if (lowStockIngredients.length > 0) {
+    warnings.push(
+      `Inventory is low for ${Array.from(new Set(lowStockIngredients)).join(", ")}; replenish soon.`,
+    );
   }
 
   const budDate = new Date(result.budDateIso);
@@ -159,6 +190,20 @@ export function runHardChecks(params: {
     warnings.push("Preparation instructions are sparse; verify compounding technique details.");
   }
 
+  const externalClinical = evaluateExternalClinicalChecks({
+    medicationName,
+    result,
+    patientWeightKg,
+    allergies,
+    ingredients,
+    currentMedications,
+    snapshot: externalSafetySnapshot,
+    failClosedExternalChecks,
+  });
+
+  blockingIssues.push(...externalClinical.blockingIssues);
+  warnings.push(...externalClinical.warnings);
+
   return {
     checks: {
       doseRange: {
@@ -173,6 +218,9 @@ export function runHardChecks(params: {
           ? `Potential crossmatch with: ${allergyMatches.join(", ")}.`
           : "No patient allergy conflict detected against ingredients.",
       },
+      allergyCrossSensitivity: externalClinical.checks.allergyCrossSensitivity,
+      drugInteractions: externalClinical.checks.drugInteractions,
+      externalDoseRange: externalClinical.checks.externalDoseRange,
       unitsConsistency: {
         status: invalidUnits.length ? "FAIL" : "PASS",
         detail: invalidUnits.length
