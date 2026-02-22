@@ -128,14 +128,12 @@ export function LandingPage() {
               {/* Duplicate the list to make it seamless */}
               {[...Array(2)].map((_, i) => (
                 <div key={i} className="flex gap-16 items-center">
-                  <div className="text-2xl font-bold text-neutral-600 tracking-tight">AuraHealth Rx</div>
-                  <div className="text-2xl font-semibold text-neutral-600 tracking-tighter">NexCompound</div>
-                  <div className="text-2xl font-black text-neutral-600 tracking-widest">VITA<span className="text-neutral-500">LABS</span></div>
-                  <div className="text-2xl font-medium text-neutral-600">Precision<span className="italic font-light">Pharma</span></div>
-                  <div className="text-2xl font-bold text-neutral-600 tracking-tight">AuraHealth Rx</div>
-                  <div className="text-2xl font-semibold text-neutral-600 tracking-tighter">NexCompound</div>
-                  <div className="text-2xl font-black text-neutral-600 tracking-widest">VITA<span className="text-neutral-500">LABS</span></div>
-                  <div className="text-2xl font-medium text-neutral-600">Precision<span className="italic font-light">Pharma</span></div>
+                  <div className="text-2xl font-bold text-neutral-600 tracking-tight">Chris Express Drugs</div>
+                  <div className="text-2xl font-semibold text-neutral-600 tracking-tighter">Genesis Med Tech</div>
+                  <div className="text-2xl font-bold text-neutral-600 tracking-tight">Chris Express Drugs</div>
+                  <div className="text-2xl font-semibold text-neutral-600 tracking-tighter">Genesis Med Tech</div>
+                  <div className="text-2xl font-bold text-neutral-600 tracking-tight">Chris Express Drugs</div>
+                  <div className="text-2xl font-semibold text-neutral-600 tracking-tighter">Genesis Med Tech</div>
                 </div>
               ))}
             </div>
@@ -156,13 +154,13 @@ export function LandingPage() {
                 ))}
               </div>
               <p className="text-xl text-neutral-300 font-light leading-relaxed mb-8">
-                &quot;The deterministic checks completely removed the anxiety from our custom dosing workflow. It&apos;s the sleekest software we&apos;ve ever used in a clinical setting.&quot;
+                &quot;Absolutely, I would love to pilot this for my pharmacy. Thank you so much! Compounding is inefficient for me sometimes, and if I could save time doing it, then that is something I would absolutely pay for.&quot;
               </p>
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-neutral-800" />
                 <div>
-                  <div className="font-medium">Dr. Sarah Jenkins</div>
-                  <div className="text-sm text-neutral-500">Lead Pharmacist, VitaLabs</div>
+                  <div className="font-medium">Chris P.</div>
+                  <div className="text-sm text-neutral-500">Pilot Tester</div>
                 </div>
               </div>
             </div>
@@ -174,13 +172,49 @@ export function LandingPage() {
                 ))}
               </div>
               <p className="text-xl text-neutral-300 font-light leading-relaxed mb-8">
-                &quot;Medivance transformed our formula resolution process from a chaotic spreadsheet mess into a perfectly oiled machine. The audit trail is flawless.&quot;
+                &quot;It gets so busy... we have over 30 requests for compound filed a day. Not only this, but we have about four people working to make all of these compounds. The point is, this would help.&quot;
               </p>
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-neutral-800" />
                 <div>
-                  <div className="font-medium">Michael Chen, PharmD</div>
-                  <div className="text-sm text-neutral-500">Director of Operations, NexCompound</div>
+                  <div className="font-medium">Kerri C.</div>
+                  <div className="text-sm text-neutral-500">Pilot Tester</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-10 rounded-3xl border border-white/5 bg-gradient-to-b from-[#0A0A0A] to-[#050505]">
+              <div className="flex gap-1 mb-6">
+                {[...Array(5)].map((_, i) => (
+                  <svg key={i} className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                ))}
+              </div>
+              <p className="text-xl text-neutral-300 font-light leading-relaxed mb-8">
+                &quot;Sure! Feel free to send the site over and we would absolutely love to test it!&quot;
+              </p>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-neutral-800" />
+                <div>
+                  <div className="font-medium">Mallorie T.</div>
+                  <div className="text-sm text-neutral-500">Pilot Tester</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-10 rounded-3xl border border-white/5 bg-gradient-to-b from-[#0A0A0A] to-[#050505]">
+              <div className="flex gap-1 mb-6">
+                {[...Array(5)].map((_, i) => (
+                  <svg key={i} className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                ))}
+              </div>
+              <p className="text-xl text-neutral-300 font-light leading-relaxed mb-8">
+                &quot;I&apos;ve looked over your idea, and it looks great! I am excited to see what your company decided to do with this product.&quot;
+              </p>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-neutral-800" />
+                <div>
+                  <div className="font-medium">Taishi N.</div>
+                  <div className="text-sm text-neutral-500">Pilot Tester</div>
                 </div>
               </div>
             </div>
