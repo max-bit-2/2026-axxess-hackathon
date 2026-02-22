@@ -10,11 +10,15 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@remotion/bundler": "^4.0.427",
+    "@remotion/cli": "^4.0.427",
+    "@remotion/renderer": "^4.0.427",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "remotion": "^4.0.427"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
