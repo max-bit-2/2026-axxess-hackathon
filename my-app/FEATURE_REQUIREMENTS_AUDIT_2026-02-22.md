@@ -11,7 +11,7 @@ Status legend:
 
 | Requirement | Status | Evidence in code | Gap / Risk | Priority |
 |---|---|---|---|---|
-| Queue shows today's jobs by patient/prescription | Implemented | `src/lib/medivance/db.ts` (`getQueueItems`) with `MEDIVANCE_QUEUE_TIMEZONE`, `/dashboard` UI | None | P1 |
+| Queue shows today's jobs by patient/prescription | Implemented | `src/lib/medivance/db.ts` (`getQueueItems`), `/dashboard` UI | None | P1 |
 | Formula resolution hierarchy (patient -> company -> generate) | Implemented | `src/lib/medivance/db.ts` (`resolveFormulaForPrescription`) | Generated path is templated fallback, not literature-driven | P1 |
 | External drug registry lookup (NDC, labeling) | Implemented | `src/lib/medivance/references.ts` + openFDA calls | No FDA 503B facility integration yet | P1 |
 | Deterministic calculation engine (no LLM arithmetic) | Implemented | `src/lib/medivance/calculations.ts` | Advanced compounding math set not complete | P1 |
@@ -32,7 +32,7 @@ Status legend:
 | BUD validation | Implemented | `src/lib/medivance/calculations.ts` + `src/lib/medivance/safety.ts` | USP table depth not yet comprehensive | P1 |
 | Lot expiry validation | Implemented | `src/lib/medivance/safety.ts` | None | P0 |
 | Incompatibility check | Implemented | `src/lib/medivance/safety.ts` (formula safety profile pairs) | No external compatibility dataset wired yet | P1 |
-| Inventory availability pre-check + low-stock warning | Implemented | `src/lib/medivance/safety.ts` + `db.ts` inventory fetch; env + formula-configurable warning multipliers | Configurable reorder thresholds/workflow are not modeled yet | P1 |
+| Inventory availability pre-check + low-stock warning | Implemented | `src/lib/medivance/safety.ts` + `db.ts` inventory fetch | Configurable reorder thresholds are not modeled yet | P1 |
 | Fail-closed external check mode | Implemented | `src/lib/env.ts`, `pipeline.ts`, `external-safety.ts` | Must validate in production with real API failure drills | P0 |
 
 ## Records, Compliance, and Data Model Coverage
@@ -42,7 +42,7 @@ Status legend:
 | MFR/CR separation | Implemented | `approveCompoundingJob` final report includes both `masterFormulationRecord` and `compoundingRecord` | None | P1 |
 | MFR-required metadata fields | Implemented | `formulas` fields + migration `202602220005...` | Validation depth for every USP-required field can be tightened | P1 |
 | Immutable audit/report/final tables | Implemented (migration-defined) | `202602220005_compliance_locking_and_inventory.sql` triggers | Not enforced until migration applied | P0 |
-| Demo signing flow (meaning + attestation) | Implemented | `src/lib/medivance/signing.ts`, `pipeline.ts`, routes | Simplified for demo; weaker than strict Part 11 controls | P1 |
+| Part 11 strict signing flow (PIN + challenge + meaning + attestation) | Implemented (app + migration-defined RPCs) | `src/lib/medivance/signing.ts`, `db.ts`, routes, migration `202602220006...` | Not enforceable until migration applied | P0 |
 | Inventory consumption deduction on approval | Implemented | RPC `consume_inventory_for_job` + `inventory_consumptions` | Depends on migration apply | P1 |
 | RBAC and tenant isolation | Implemented baseline | Supabase RLS policies | Fine-grained role model beyond owner/pharmacist not yet present | P1 |
 | HIPAA program controls (BAA workflow, PHI minimization policy, full access logging program) | Partial | RLS + app audit events present | Formal HIPAA/SOC control program remains open | P1 |

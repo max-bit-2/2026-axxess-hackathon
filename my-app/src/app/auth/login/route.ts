@@ -21,6 +21,7 @@ export async function POST(request: Request) {
 async function startOauthLogin(request: Request) {
   const requestUrl = new URL(request.url);
   const nextPath = safeNextPath(requestUrl.searchParams.get("next"));
+  const redirectStatus = request.method === "POST" ? 303 : 307;
 
   const supabase = await createClient();
   const callbackUrl = new URL("/auth/callback", env.siteUrl);
@@ -40,8 +41,8 @@ async function startOauthLogin(request: Request) {
   if (error || !data.url) {
     const errorUrl = new URL("/signin", requestUrl.origin);
     errorUrl.searchParams.set("error", error?.message ?? "OAuth login failed.");
-    return NextResponse.redirect(errorUrl);
+    return NextResponse.redirect(errorUrl, redirectStatus);
   }
 
-  return NextResponse.redirect(data.url);
+  return NextResponse.redirect(data.url, redirectStatus);
 }
