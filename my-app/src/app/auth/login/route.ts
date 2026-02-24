@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 function safeNextPath(nextValue: string | null) {
@@ -24,7 +23,7 @@ async function startOauthLogin(request: Request) {
   const redirectStatus = request.method === "POST" ? 303 : 307;
 
   const supabase = await createClient();
-  const callbackUrl = new URL("/auth/callback", env.siteUrl);
+  const callbackUrl = new URL("/auth/callback", requestUrl.origin);
   callbackUrl.searchParams.set("next", nextPath);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
