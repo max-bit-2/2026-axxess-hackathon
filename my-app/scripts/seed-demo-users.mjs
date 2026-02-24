@@ -138,6 +138,7 @@ async function ensureAuthUser(entry, usersByEmail) {
 }
 
 async function ensureDemoDomainData(userId, fullName) {
+  const targetPatientCount = 10;
   const { count, error: countError } = await supabase
     .from("patients")
     .select("id", { count: "exact", head: true })
@@ -145,44 +146,49 @@ async function ensureDemoDomainData(userId, fullName) {
 
   if (countError) throw countError;
 
-  if ((count ?? 0) > 0) {
+  const existingCount = count ?? 0;
+  if (existingCount >= targetPatientCount) {
     return { seeded: false, patientId: null };
   }
 
   const { firstName, lastName } = splitName(fullName);
+  const patientCountToCreate = targetPatientCount - existingCount;
+  const patientRows = Array.from({ length: patientCountToCreate }, (_, index) => ({
+    owner_id: userId,
+    first_name: `${firstName}${index + 1 + existingCount}`,
+    last_name: lastName,
+    dob: "1990-01-15",
+    weight_kg: 70.5 - (index % 5) * 2.1,
+    allergies: index % 4 === 0 ? ["sulfa"] : [],
+    notes: `Demo patient record ${index + 1 + existingCount} for ${fullName}`,
+  }));
 
-  const { data: patient, error: patientError } = await supabase
+  const { data: patients, error: patientError } = await supabase
     .from("patients")
-    .insert({
-      owner_id: userId,
-      first_name: firstName,
-      last_name: lastName,
-      dob: "1990-01-15",
-      weight_kg: 70.5,
-      allergies: [],
-      notes: `Demo patient record for ${fullName}`,
-    })
-    .select("id")
-    .single();
+    .insert(patientRows)
+    .select("id");
 
-  if (patientError || !patient) {
+  if (patientError || !patients?.length) {
     throw patientError ?? new Error(`Failed to seed patient for ${fullName}`);
   }
 
   const now = Date.now();
-  const prescriptions = medications.map((medication) => ({
-    owner_id: userId,
-    patient_id: patient.id,
-    medication_name: medication.medicationName,
-    indication: medication.indication,
-    route: medication.route,
-    dose_mg_per_kg: medication.doseMgPerKg,
-    frequency_per_day: medication.frequencyPerDay,
-    strength_mg_per_ml: medication.strengthMgPerMl,
-    dispense_volume_ml: medication.dispenseVolumeMl,
-    notes: medication.notes,
-    due_at: new Date(now + medication.dueOffsetHours * 60 * 60 * 1000).toISOString(),
-  }));
+  const prescriptions = patients.map((patient, index) => {
+    const medication = medications[index % medications.length];
+    return {
+      owner_id: userId,
+      patient_id: patient.id,
+      medication_name: medication.medicationName,
+      indication: medication.indication,
+      route: medication.route,
+      dose_mg_per_kg: medication.doseMgPerKg,
+      frequency_per_day: medication.frequencyPerDay,
+      strength_mg_per_ml: medication.strengthMgPerMl,
+      dispense_volume_ml: medication.dispenseVolumeMl,
+      notes: medication.notes,
+      due_at: new Date(now + (medication.dueOffsetHours + index) * 60 * 60 * 1000).toISOString(),
+    };
+  });
 
   const { error: prescriptionError } = await supabase
     .from("prescriptions")
@@ -190,7 +196,7 @@ async function ensureDemoDomainData(userId, fullName) {
 
   if (prescriptionError) throw prescriptionError;
 
-  return { seeded: true, patientId: patient.id };
+  return { seeded: true, patientId: patients[0].id };
 }
 
 async function main() {

@@ -13,15 +13,19 @@ const dateTime = new Intl.DateTimeFormat("en-US", {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; view?: string }>;
 }) {
   const { supabase, user } = await requireUser();
   await ensureDemoData(supabase, user.id);
 
   const params = await searchParams;
   const q = params.q?.toLowerCase() || "";
+  const isAllJobsView = params.view === "all";
+  const activeView = isAllJobsView ? "all" : "today";
 
-  let queue = await getQueueItems(supabase, user.id);
+  let queue = await getQueueItems(supabase, user.id, {
+    includeAll: isAllJobsView,
+  });
 
   if (q) {
     queue = queue.filter(
@@ -50,11 +54,48 @@ export default async function DashboardPage({
           <p className="text-slate-500 mt-1">Real-time compounding workflow and verification queue.</p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-1">
+            <Link
+              href={q ? `/dashboard?q=${encodeURIComponent(q)}` : "/dashboard"}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                activeView === "today"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              Due Today
+            </Link>
+            <Link
+              href={
+                q
+                  ? `/dashboard?view=all&q=${encodeURIComponent(q)}`
+                  : "/dashboard?view=all"
+              }
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                activeView === "all"
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              All Jobs
+            </Link>
+          </div>
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
             <span className="material-symbols-outlined text-[16px]">sync</span>
             Last updated: {new Date().toLocaleTimeString('en-US', {hour: 'numeric', minute:'2-digit'})}
           </span>
-          <Link href="/dashboard" className="bg-[var(--color-primary)] hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm shadow-[var(--color-primary)]/30 transition-all flex items-center gap-2">
+          <Link
+            href={
+              activeView === "all"
+                ? q
+                  ? `/dashboard?view=all&q=${encodeURIComponent(q)}`
+                  : "/dashboard?view=all"
+                : q
+                  ? `/dashboard?q=${encodeURIComponent(q)}`
+                  : "/dashboard"
+            }
+            className="bg-[var(--color-primary)] hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm shadow-[var(--color-primary)]/30 transition-all flex items-center gap-2"
+          >
             <span className="material-symbols-outlined text-[18px]">refresh</span>
             Refresh Queue
           </Link>
@@ -72,7 +113,9 @@ export default async function DashboardPage({
             <span className="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-500 rounded-md">Total</span>
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500 ">Queue Today</p>
+            <p className="text-sm font-medium text-slate-500 ">
+              {activeView === "all" ? "All Jobs" : "Queue Today"}
+            </p>
             <p className="text-3xl font-bold text-slate-900 mt-1">{stats.total}</p>
           </div>
         </div>

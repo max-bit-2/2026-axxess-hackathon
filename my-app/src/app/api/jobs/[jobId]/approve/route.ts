@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 import { approveCompoundingJob } from "@/lib/medivance/pipeline";
 import { createClient } from "@/lib/supabase/server";
 
-function buildRedirect(request: Request, jobId: string, toast: string) {
+function buildRedirect(request: Request, toast: string) {
   const requestUrl = new URL(request.url);
-  const redirectUrl = new URL(`/dashboard/jobs/${jobId}`, requestUrl.origin);
+  const redirectUrl = new URL("/dashboard", requestUrl.origin);
   redirectUrl.searchParams.set("toast", toast);
   return NextResponse.redirect(redirectUrl);
 }
@@ -29,7 +29,7 @@ export async function POST(
   const note = typeof noteValue === "string" ? noteValue.trim() : "";
 
   if (!note) {
-    return buildRedirect(request, jobId, "Approval rationale is required.");
+    return buildRedirect(request, "Approval rationale is required.");
   }
   const signatureMeaningValue = formData.get("signatureMeaning");
   const signatureMeaning =
@@ -53,10 +53,10 @@ export async function POST(
       signatureAttestation,
       note,
     });
-    return buildRedirect(request, jobId, "Job approved and final label generated.");
+    return buildRedirect(request, "Job approved and final label generated.");
   } catch (error) {
     const message =
       error instanceof Error ? `Approval failed: ${error.message}` : "Approval failed.";
-    return buildRedirect(request, jobId, message);
+    return buildRedirect(request, message);
   }
 }

@@ -170,189 +170,273 @@ export async function ensureDemoData(
   supabase: SupabaseClient,
   userId: string,
 ) {
+  const targetDemoPatientCount = 10;
   const { count, error: countError } = await supabase
     .from("patients")
     .select("id", { count: "exact", head: true })
     .eq("owner_id", userId);
 
   if (countError) throw countError;
-  if ((count ?? 0) > 0) return;
+  const existingPatientCount = count ?? 0;
+  if (existingPatientCount >= targetDemoPatientCount) return;
 
-  const { data: patient, error: patientError } = await supabase
-    .from("patients")
-    .insert({
-      owner_id: userId,
-      first_name: "Avery",
-      last_name: "Lopez",
+  const demoPatients = [
+    {
+      firstName: "Avery",
+      lastName: "Lopez",
       dob: "2016-05-14",
-      weight_kg: 22.4,
+      weightKg: 22.4,
       allergies: ["sulfa"],
       notes: "Pediatric patient. Prefers grape-flavored suspension.",
-    })
-    .select("id")
-    .single();
-
-  if (patientError || !patient) throw patientError ?? new Error("Failed to seed patient.");
-
-  const companyFormula = {
-    owner_id: userId,
-    patient_id: null,
-    medication_name: "Baclofen",
-    name: "Baclofen 10 mg/mL Oral Suspension",
-    source: "company",
-    ingredient_profile: [
-      {
-        name: "Baclofen",
-        role: "api",
-        quantity: 1,
-        unit: "g",
-        concentrationMgPerMl: 10,
-      },
-      {
-        name: "Ora-Blend",
-        role: "vehicle",
-        quantity: 0,
-        unit: "mL",
-      },
-    ],
-    safety_profile: {
-      minSingleDoseMg: 2,
-      maxSingleDoseMg: 30,
-      maxDailyDoseMg: 90,
-      incompatibilities: [["baclofen", "ethanol"]],
-      budRule: {
-        category: "aqueous",
-        hasStabilityData: false,
-      },
-    },
-    instructions:
-      "Triturate baclofen to a fine powder, wet with glycerin, and qs with Ora-Blend.",
-    equipment: ["Class A balance", "Mortar and pestle", "Graduated cylinder"],
-    quality_control: ["Appearance check", "Volume verification", "Label verification"],
-    container_closure: "Amber PET bottle with child-resistant cap.",
-    labeling_requirements: "Shake well. Refrigerate. Keep out of reach of children.",
-    bud_rationale:
-      "Default USP <795> aqueous BUD applied due to no supporting stability study.",
-    reference_sources: [
-      { source: "internal", detail: "MFR-BCF-10-PO" },
-      { source: "usp", detail: "<795> default nonsterile guidance" },
-    ],
-  };
-
-  const patientSpecificFormula = {
-    owner_id: userId,
-    patient_id: patient.id,
-    medication_name: "Omeprazole",
-    name: "Avery Omeprazole 2 mg/mL Custom",
-    source: "patient",
-    ingredient_profile: [
-      {
-        name: "Omeprazole",
-        role: "api",
-        quantity: 0.5,
-        unit: "g",
-        concentrationMgPerMl: 2,
-      },
-      {
-        name: "Sodium Bicarbonate Vehicle",
-        role: "vehicle",
-        quantity: 0,
-        unit: "mL",
-      },
-    ],
-    safety_profile: {
-      minSingleDoseMg: 2,
-      maxSingleDoseMg: 40,
-      maxDailyDoseMg: 80,
-      budRule: {
-        category: "aqueous",
-        hasStabilityData: false,
-      },
-    },
-    instructions:
-      "Suspend omeprazole powder in sodium bicarbonate vehicle. Protect from light.",
-    equipment: ["Class A balance", "Mortar and pestle", "Amber bottle"],
-    quality_control: ["Visual check for clumping", "pH spot check", "Final volume verification"],
-    container_closure: "Amber oral suspension bottle.",
-    labeling_requirements: "Shake well. Refrigerate. Discard after BUD.",
-    bud_rationale:
-      "Patient-specific nonsterile aqueous preparation with no additional stability data.",
-    reference_sources: [
-      { source: "internal", detail: "MFR-OME-2-PO-AVERY" },
-      { source: "literature", detail: "Omeprazole bicarbonate suspension pediatric practice notes" },
-    ],
-  };
-
-  const { error: formulaError } = await supabase
-    .from("formulas")
-    .insert([companyFormula, patientSpecificFormula]);
-  if (formulaError) throw formulaError;
-
-  const { error: inventoryError } = await supabase.from("inventory_lots").insert([
-    {
-      owner_id: userId,
-      ingredient_name: "Baclofen",
-      ndc: "00000-0000-10",
-      lot_number: "BAC-2601",
-      available_quantity: 12,
-      unit: "g",
-      expires_on: "2027-02-01",
     },
     {
-      owner_id: userId,
-      ingredient_name: "Ora-Blend",
-      lot_number: "ORB-3421",
-      available_quantity: 2100,
-      unit: "mL",
-      expires_on: "2026-11-30",
+      firstName: "Noah",
+      lastName: "Kim",
+      dob: "2015-08-20",
+      weightKg: 24.1,
+      allergies: [],
+      notes: "Needs flavor masking for better adherence.",
     },
     {
-      owner_id: userId,
-      ingredient_name: "Omeprazole",
-      lot_number: "OME-9981",
-      available_quantity: 2.5,
-      unit: "g",
-      expires_on: "2026-09-15",
+      firstName: "Mia",
+      lastName: "Patel",
+      dob: "2018-01-11",
+      weightKg: 18.6,
+      allergies: ["penicillin"],
+      notes: "Caregiver requests oral syringe calibration notes.",
     },
     {
-      owner_id: userId,
-      ingredient_name: "Sodium Bicarbonate Vehicle",
-      lot_number: "SBV-1021",
-      available_quantity: 1100,
-      unit: "mL",
-      expires_on: "2026-08-10",
-    },
-  ]);
-  if (inventoryError) throw inventoryError;
-
-  const prescriptions = [
-    {
-      owner_id: userId,
-      patient_id: patient.id,
-      medication_name: "Omeprazole",
-      indication: "GERD",
-      route: "PO",
-      dose_mg_per_kg: 1,
-      frequency_per_day: 2,
-      strength_mg_per_ml: 2,
-      dispense_volume_ml: 150,
-      notes: "Take before breakfast and dinner.",
-      due_at: new Date().toISOString(),
+      firstName: "Ethan",
+      lastName: "Reed",
+      dob: "2014-09-03",
+      weightKg: 29.2,
+      allergies: [],
+      notes: "Swallowing difficulty; prefers suspension over tablets.",
     },
     {
-      owner_id: userId,
-      patient_id: patient.id,
-      medication_name: "Baclofen",
-      indication: "Spasticity",
-      route: "PO",
-      dose_mg_per_kg: 0.35,
-      frequency_per_day: 3,
-      strength_mg_per_ml: 10,
-      dispense_volume_ml: 120,
-      notes: "Titrate to response.",
-      due_at: new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString(),
+      firstName: "Sophia",
+      lastName: "Nguyen",
+      dob: "2017-03-28",
+      weightKg: 21.3,
+      allergies: ["lactose"],
+      notes: "Use lactose-free excipient profile when possible.",
+    },
+    {
+      firstName: "Liam",
+      lastName: "Garcia",
+      dob: "2013-12-10",
+      weightKg: 33.5,
+      allergies: [],
+      notes: "Monitor for daytime sedation effects.",
+    },
+    {
+      firstName: "Isabella",
+      lastName: "Brooks",
+      dob: "2019-04-06",
+      weightKg: 16.8,
+      allergies: ["sulfites"],
+      notes: "Document preservative-free options in counseling notes.",
+    },
+    {
+      firstName: "Lucas",
+      lastName: "Hayes",
+      dob: "2012-11-22",
+      weightKg: 36.7,
+      allergies: [],
+      notes: "Parent prefers BID schedule when clinically appropriate.",
+    },
+    {
+      firstName: "Amelia",
+      lastName: "Turner",
+      dob: "2016-07-17",
+      weightKg: 23.8,
+      allergies: ["sulfa"],
+      notes: "Previous rash with sulfonamide-containing products.",
+    },
+    {
+      firstName: "James",
+      lastName: "Chen",
+      dob: "2015-02-26",
+      weightKg: 27.6,
+      allergies: [],
+      notes: "Family requests larger-print auxiliary labels.",
     },
   ];
+
+  const patientsToSeed = demoPatients.slice(existingPatientCount, targetDemoPatientCount);
+
+  const { data: seededPatients, error: patientError } = await supabase
+    .from("patients")
+    .insert(
+      patientsToSeed.map((patient) => ({
+        owner_id: userId,
+        first_name: patient.firstName,
+        last_name: patient.lastName,
+        dob: patient.dob,
+        weight_kg: patient.weightKg,
+        allergies: patient.allergies,
+        notes: patient.notes,
+      })),
+    )
+    .select("id, first_name");
+
+  if (patientError || !seededPatients?.length) {
+    throw patientError ?? new Error("Failed to seed demo patients.");
+  }
+  if (existingPatientCount === 0) {
+    const primaryPatientId = asString(seededPatients[0]?.id);
+    const primaryPatientFirstName = asString(seededPatients[0]?.first_name, "Demo");
+
+    const companyFormula = {
+      owner_id: userId,
+      patient_id: null,
+      medication_name: "Baclofen",
+      name: "Baclofen 10 mg/mL Oral Suspension",
+      source: "company",
+      ingredient_profile: [
+        {
+          name: "Baclofen",
+          role: "api",
+          quantity: 1,
+          unit: "g",
+          concentrationMgPerMl: 10,
+        },
+        {
+          name: "Ora-Blend",
+          role: "vehicle",
+          quantity: 0,
+          unit: "mL",
+        },
+      ],
+      safety_profile: {
+        minSingleDoseMg: 2,
+        maxSingleDoseMg: 30,
+        maxDailyDoseMg: 90,
+        incompatibilities: [["baclofen", "ethanol"]],
+        budRule: {
+          category: "aqueous",
+          hasStabilityData: false,
+        },
+      },
+      instructions:
+        "Triturate baclofen to a fine powder, wet with glycerin, and qs with Ora-Blend.",
+      equipment: ["Class A balance", "Mortar and pestle", "Graduated cylinder"],
+      quality_control: ["Appearance check", "Volume verification", "Label verification"],
+      container_closure: "Amber PET bottle with child-resistant cap.",
+      labeling_requirements: "Shake well. Refrigerate. Keep out of reach of children.",
+      bud_rationale:
+        "Default USP <795> aqueous BUD applied due to no supporting stability study.",
+      reference_sources: [
+        { source: "internal", detail: "MFR-BCF-10-PO" },
+        { source: "usp", detail: "<795> default nonsterile guidance" },
+      ],
+    };
+
+    const patientSpecificFormula = {
+      owner_id: userId,
+      patient_id: primaryPatientId,
+      medication_name: "Omeprazole",
+      name: `${primaryPatientFirstName} Omeprazole 2 mg/mL Custom`,
+      source: "patient",
+      ingredient_profile: [
+        {
+          name: "Omeprazole",
+          role: "api",
+          quantity: 0.5,
+          unit: "g",
+          concentrationMgPerMl: 2,
+        },
+        {
+          name: "Sodium Bicarbonate Vehicle",
+          role: "vehicle",
+          quantity: 0,
+          unit: "mL",
+        },
+      ],
+      safety_profile: {
+        minSingleDoseMg: 2,
+        maxSingleDoseMg: 40,
+        maxDailyDoseMg: 80,
+        budRule: {
+          category: "aqueous",
+          hasStabilityData: false,
+        },
+      },
+      instructions:
+        "Suspend omeprazole powder in sodium bicarbonate vehicle. Protect from light.",
+      equipment: ["Class A balance", "Mortar and pestle", "Amber bottle"],
+      quality_control: ["Visual check for clumping", "pH spot check", "Final volume verification"],
+      container_closure: "Amber oral suspension bottle.",
+      labeling_requirements: "Shake well. Refrigerate. Discard after BUD.",
+      bud_rationale:
+        "Patient-specific nonsterile aqueous preparation with no additional stability data.",
+      reference_sources: [
+        { source: "internal", detail: "MFR-OME-2-PO-AVERY" },
+        { source: "literature", detail: "Omeprazole bicarbonate suspension pediatric practice notes" },
+      ],
+    };
+
+    const { error: formulaError } = await supabase
+      .from("formulas")
+      .insert([companyFormula, patientSpecificFormula]);
+    if (formulaError) throw formulaError;
+
+    const { error: inventoryError } = await supabase.from("inventory_lots").insert([
+      {
+        owner_id: userId,
+        ingredient_name: "Baclofen",
+        ndc: "00000-0000-10",
+        lot_number: "BAC-2601",
+        available_quantity: 12,
+        unit: "g",
+        expires_on: "2027-02-01",
+      },
+      {
+        owner_id: userId,
+        ingredient_name: "Ora-Blend",
+        lot_number: "ORB-3421",
+        available_quantity: 2100,
+        unit: "mL",
+        expires_on: "2026-11-30",
+      },
+      {
+        owner_id: userId,
+        ingredient_name: "Omeprazole",
+        lot_number: "OME-9981",
+        available_quantity: 2.5,
+        unit: "g",
+        expires_on: "2026-09-15",
+      },
+      {
+        owner_id: userId,
+        ingredient_name: "Sodium Bicarbonate Vehicle",
+        lot_number: "SBV-1021",
+        available_quantity: 1100,
+        unit: "mL",
+        expires_on: "2026-08-10",
+      },
+    ]);
+    if (inventoryError) throw inventoryError;
+  }
+
+  const prescriptions = seededPatients.map((seededPatient, index) => {
+    const useOmeprazole = index % 2 === 0;
+    return {
+      owner_id: userId,
+      patient_id: asString(seededPatient.id),
+      medication_name: useOmeprazole ? "Omeprazole" : "Baclofen",
+      indication: useOmeprazole ? "GERD" : "Spasticity",
+      route: "PO",
+      dose_mg_per_kg: useOmeprazole ? 1 : 0.35,
+      frequency_per_day: useOmeprazole ? 2 : 3,
+      strength_mg_per_ml: useOmeprazole ? 2 : 10,
+      dispense_volume_ml: useOmeprazole ? 150 : 120,
+      notes: useOmeprazole
+        ? "Take before breakfast and dinner."
+        : "Titrate to response.",
+      due_at: new Date(Date.now() + index * 15 * 60 * 1000).toISOString(),
+    };
+  });
 
   const { error: prescriptionError } = await supabase
     .from("prescriptions")
@@ -363,6 +447,7 @@ export async function ensureDemoData(
 export async function getQueueItems(
   supabase: SupabaseClient,
   userId: string,
+  options?: { includeAll?: boolean },
 ) {
   const { data, error } = await supabase
     .from("compounding_jobs")
@@ -394,9 +479,10 @@ export async function getQueueItems(
 
   if (error) throw error;
 
+  const includeAll = options?.includeAll ?? false;
   const todayDateKey = toDateKeyInTimezone(new Date(), env.queueTimezone);
 
-  return (data ?? [])
+  const mappedItems = (data ?? [])
     .map((row: Record<string, unknown>) => {
       const prescription = asRecord(row.prescriptions);
       const patient = asRecord(prescription.patients);
@@ -417,11 +503,14 @@ export async function getQueueItems(
         patientId: asString(prescription.patient_id),
         patientName: `${firstName} ${lastName}`,
       } satisfies QueueItem;
-    })
-    .filter((item) => {
-      if (!item.dueAt) return false;
-      return toDateKeyInTimezone(new Date(item.dueAt), env.queueTimezone) === todayDateKey;
     });
+
+  if (includeAll) return mappedItems;
+
+  return mappedItems.filter((item) => {
+    if (!item.dueAt) return false;
+    return toDateKeyInTimezone(new Date(item.dueAt), env.queueTimezone) === todayDateKey;
+  });
 }
 
 export async function getJobContext(
