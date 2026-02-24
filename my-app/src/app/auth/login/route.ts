@@ -11,6 +11,14 @@ function safeNextPath(nextValue: string | null) {
 }
 
 export async function GET(request: Request) {
+  return startOauthLogin(request);
+}
+
+export async function POST(request: Request) {
+  return startOauthLogin(request);
+}
+
+async function startOauthLogin(request: Request) {
   const requestUrl = new URL(request.url);
   const nextPath = safeNextPath(requestUrl.searchParams.get("next"));
 
