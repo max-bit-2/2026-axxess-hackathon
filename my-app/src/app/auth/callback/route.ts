@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+import {
+  ensureDemoData,
+  refreshQueueDueDatesOnLogin,
+  syncDemoPatientDemographicsOnLogin,
+  syncDemoPrescriptionProfilesOnLogin,
+} from "@/lib/medivance/db";
 import { createClient } from "@/lib/supabase/server";
 
 function safeNextPath(nextValue: string | null) {
@@ -27,6 +33,21 @@ export async function GET(request: Request) {
     const signinUrl = new URL("/signin", requestUrl.origin);
     signinUrl.searchParams.set("error", error.message);
     return NextResponse.redirect(signinUrl);
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    try {
+      await ensureDemoData(supabase, user.id);
+      await syncDemoPatientDemographicsOnLogin(supabase, user.id);
+      await syncDemoPrescriptionProfilesOnLogin(supabase, user.id);
+      await refreshQueueDueDatesOnLogin(supabase, user.id);
+    } catch (syncError) {
+      console.error("Failed to refresh demo data during login.", syncError);
+    }
   }
 
   return NextResponse.redirect(new URL(nextPath, requestUrl.origin));

@@ -123,6 +123,7 @@ export interface JobContext {
   patient: {
     id: string;
     fullName: string;
+    dob: string | null;
     weightKg: number;
     allergies: string[];
     currentMedications: string[];
@@ -166,11 +167,177 @@ export interface AuditEventRow {
   createdAt: string;
 }
 
+const DEMO_PATIENTS = [
+  {
+    firstName: "Avery",
+    lastName: "Lopez",
+    dob: "1991-05-14",
+    weightKg: 68.2,
+    allergies: ["sulfa"],
+    notes: "Prefers grape-flavored suspension.",
+  },
+  {
+    firstName: "Noah",
+    lastName: "Kim",
+    dob: "1987-08-20",
+    weightKg: 79.4,
+    allergies: [],
+    notes: "Needs flavor masking for better adherence.",
+  },
+  {
+    firstName: "Mia",
+    lastName: "Patel",
+    dob: "1994-01-11",
+    weightKg: 62.7,
+    allergies: ["penicillin"],
+    notes: "Requests oral syringe calibration notes.",
+  },
+  {
+    firstName: "Ethan",
+    lastName: "Reed",
+    dob: "1985-09-03",
+    weightKg: 84.6,
+    allergies: [],
+    notes: "Swallowing difficulty; prefers suspension over tablets.",
+  },
+  {
+    firstName: "Sophia",
+    lastName: "Nguyen",
+    dob: "1990-03-28",
+    weightKg: 64.5,
+    allergies: ["lactose"],
+    notes: "Use lactose-free excipient profile when possible.",
+  },
+  {
+    firstName: "Liam",
+    lastName: "Garcia",
+    dob: "1983-12-10",
+    weightKg: 88.1,
+    allergies: [],
+    notes: "Monitor for daytime sedation effects.",
+  },
+  {
+    firstName: "Isabella",
+    lastName: "Brooks",
+    dob: "1996-04-06",
+    weightKg: 59.8,
+    allergies: ["sulfites"],
+    notes: "Document preservative-free options in counseling notes.",
+  },
+  {
+    firstName: "Lucas",
+    lastName: "Hayes",
+    dob: "1988-11-22",
+    weightKg: 91.3,
+    allergies: [],
+    notes: "Prefers BID schedule when clinically appropriate.",
+  },
+  {
+    firstName: "Amelia",
+    lastName: "Turner",
+    dob: "1993-07-17",
+    weightKg: 66.9,
+    allergies: ["sulfa"],
+    notes: "Previous rash with sulfonamide-containing products.",
+  },
+  {
+    firstName: "James",
+    lastName: "Chen",
+    dob: "1989-02-26",
+    weightKg: 81.7,
+    allergies: [],
+    notes: "Requests larger-print auxiliary labels.",
+  },
+] as const;
+
+const DEMO_MEDICATION_PROFILES = [
+  {
+    medicationName: "Omeprazole",
+    indication: "GERD",
+    route: "PO",
+    doseMgPerKg: 0.4,
+    frequencyPerDay: 2,
+    strengthMgPerMl: 2,
+    dispenseVolumeMl: 150,
+    notes: "Take before breakfast and dinner.",
+  },
+  {
+    medicationName: "Baclofen",
+    indication: "Spasticity",
+    route: "PO",
+    doseMgPerKg: 0.15,
+    frequencyPerDay: 3,
+    strengthMgPerMl: 10,
+    dispenseVolumeMl: 120,
+    notes: "Titrate to response.",
+  },
+  {
+    medicationName: "Gabapentin",
+    indication: "Neuropathic Pain",
+    route: "PO",
+    doseMgPerKg: 3,
+    frequencyPerDay: 3,
+    strengthMgPerMl: 50,
+    dispenseVolumeMl: 180,
+    notes: "May cause dizziness; monitor sedation.",
+  },
+  {
+    medicationName: "Spironolactone",
+    indication: "Heart Failure",
+    route: "PO",
+    doseMgPerKg: 0.5,
+    frequencyPerDay: 2,
+    strengthMgPerMl: 5,
+    dispenseVolumeMl: 120,
+    notes: "Monitor potassium and renal function.",
+  },
+  {
+    medicationName: "Hydrochlorothiazide",
+    indication: "Hypertension",
+    route: "PO",
+    doseMgPerKg: 0.25,
+    frequencyPerDay: 2,
+    strengthMgPerMl: 5,
+    dispenseVolumeMl: 120,
+    notes: "Give earlier in the day to reduce nocturia.",
+  },
+  {
+    medicationName: "Sildenafil",
+    indication: "Pulmonary Hypertension",
+    route: "PO",
+    doseMgPerKg: 0.5,
+    frequencyPerDay: 3,
+    strengthMgPerMl: 2.5,
+    dispenseVolumeMl: 150,
+    notes: "Monitor blood pressure and headache symptoms.",
+  },
+  {
+    medicationName: "Naltrexone",
+    indication: "Chronic Pain (LDN)",
+    route: "PO",
+    doseMgPerKg: 0.06,
+    frequencyPerDay: 1,
+    strengthMgPerMl: 1,
+    dispenseVolumeMl: 60,
+    notes: "Administer at bedtime when tolerated.",
+  },
+  {
+    medicationName: "Levothyroxine",
+    indication: "Hypothyroidism",
+    route: "PO",
+    doseMgPerKg: 0.0016,
+    frequencyPerDay: 1,
+    strengthMgPerMl: 0.025,
+    dispenseVolumeMl: 90,
+    notes: "Take on an empty stomach, separated from minerals.",
+  },
+] as const;
+
 export async function ensureDemoData(
   supabase: SupabaseClient,
   userId: string,
 ) {
-  const targetDemoPatientCount = 10;
+  const targetDemoPatientCount = DEMO_PATIENTS.length;
   const { count, error: countError } = await supabase
     .from("patients")
     .select("id", { count: "exact", head: true })
@@ -180,90 +347,7 @@ export async function ensureDemoData(
   const existingPatientCount = count ?? 0;
   if (existingPatientCount >= targetDemoPatientCount) return;
 
-  const demoPatients = [
-    {
-      firstName: "Avery",
-      lastName: "Lopez",
-      dob: "2016-05-14",
-      weightKg: 22.4,
-      allergies: ["sulfa"],
-      notes: "Pediatric patient. Prefers grape-flavored suspension.",
-    },
-    {
-      firstName: "Noah",
-      lastName: "Kim",
-      dob: "2015-08-20",
-      weightKg: 24.1,
-      allergies: [],
-      notes: "Needs flavor masking for better adherence.",
-    },
-    {
-      firstName: "Mia",
-      lastName: "Patel",
-      dob: "2018-01-11",
-      weightKg: 18.6,
-      allergies: ["penicillin"],
-      notes: "Caregiver requests oral syringe calibration notes.",
-    },
-    {
-      firstName: "Ethan",
-      lastName: "Reed",
-      dob: "2014-09-03",
-      weightKg: 29.2,
-      allergies: [],
-      notes: "Swallowing difficulty; prefers suspension over tablets.",
-    },
-    {
-      firstName: "Sophia",
-      lastName: "Nguyen",
-      dob: "2017-03-28",
-      weightKg: 21.3,
-      allergies: ["lactose"],
-      notes: "Use lactose-free excipient profile when possible.",
-    },
-    {
-      firstName: "Liam",
-      lastName: "Garcia",
-      dob: "2013-12-10",
-      weightKg: 33.5,
-      allergies: [],
-      notes: "Monitor for daytime sedation effects.",
-    },
-    {
-      firstName: "Isabella",
-      lastName: "Brooks",
-      dob: "2019-04-06",
-      weightKg: 16.8,
-      allergies: ["sulfites"],
-      notes: "Document preservative-free options in counseling notes.",
-    },
-    {
-      firstName: "Lucas",
-      lastName: "Hayes",
-      dob: "2012-11-22",
-      weightKg: 36.7,
-      allergies: [],
-      notes: "Parent prefers BID schedule when clinically appropriate.",
-    },
-    {
-      firstName: "Amelia",
-      lastName: "Turner",
-      dob: "2016-07-17",
-      weightKg: 23.8,
-      allergies: ["sulfa"],
-      notes: "Previous rash with sulfonamide-containing products.",
-    },
-    {
-      firstName: "James",
-      lastName: "Chen",
-      dob: "2015-02-26",
-      weightKg: 27.6,
-      allergies: [],
-      notes: "Family requests larger-print auxiliary labels.",
-    },
-  ];
-
-  const patientsToSeed = demoPatients.slice(existingPatientCount, targetDemoPatientCount);
+  const patientsToSeed = DEMO_PATIENTS.slice(existingPatientCount, targetDemoPatientCount);
 
   const { data: seededPatients, error: patientError } = await supabase
     .from("patients")
@@ -381,16 +465,16 @@ export async function ensureDemoData(
       .insert([companyFormula, patientSpecificFormula]);
     if (formulaError) throw formulaError;
 
+    const apiInventoryLots = DEMO_MEDICATION_PROFILES.map((profile, index) => ({
+      owner_id: userId,
+      ingredient_name: profile.medicationName,
+      lot_number: `API-${index + 1}`.padEnd(8, "0"),
+      available_quantity: 20,
+      unit: "g",
+      expires_on: "2027-12-31",
+    }));
+
     const { error: inventoryError } = await supabase.from("inventory_lots").insert([
-      {
-        owner_id: userId,
-        ingredient_name: "Baclofen",
-        ndc: "00000-0000-10",
-        lot_number: "BAC-2601",
-        available_quantity: 12,
-        unit: "g",
-        expires_on: "2027-02-01",
-      },
       {
         owner_id: userId,
         ingredient_name: "Ora-Blend",
@@ -401,39 +485,30 @@ export async function ensureDemoData(
       },
       {
         owner_id: userId,
-        ingredient_name: "Omeprazole",
-        lot_number: "OME-9981",
-        available_quantity: 2.5,
-        unit: "g",
-        expires_on: "2026-09-15",
-      },
-      {
-        owner_id: userId,
         ingredient_name: "Sodium Bicarbonate Vehicle",
         lot_number: "SBV-1021",
         available_quantity: 1100,
         unit: "mL",
         expires_on: "2026-08-10",
       },
+      ...apiInventoryLots,
     ]);
     if (inventoryError) throw inventoryError;
   }
 
   const prescriptions = seededPatients.map((seededPatient, index) => {
-    const useOmeprazole = index % 2 === 0;
+    const profile = DEMO_MEDICATION_PROFILES[index % DEMO_MEDICATION_PROFILES.length];
     return {
       owner_id: userId,
       patient_id: asString(seededPatient.id),
-      medication_name: useOmeprazole ? "Omeprazole" : "Baclofen",
-      indication: useOmeprazole ? "GERD" : "Spasticity",
-      route: "PO",
-      dose_mg_per_kg: useOmeprazole ? 1 : 0.35,
-      frequency_per_day: useOmeprazole ? 2 : 3,
-      strength_mg_per_ml: useOmeprazole ? 2 : 10,
-      dispense_volume_ml: useOmeprazole ? 150 : 120,
-      notes: useOmeprazole
-        ? "Take before breakfast and dinner."
-        : "Titrate to response.",
+      medication_name: profile.medicationName,
+      indication: profile.indication,
+      route: profile.route,
+      dose_mg_per_kg: profile.doseMgPerKg,
+      frequency_per_day: profile.frequencyPerDay,
+      strength_mg_per_ml: profile.strengthMgPerMl,
+      dispense_volume_ml: profile.dispenseVolumeMl,
+      notes: profile.notes,
       due_at: new Date(Date.now() + index * 15 * 60 * 1000).toISOString(),
     };
   });
@@ -442,6 +517,105 @@ export async function ensureDemoData(
     .from("prescriptions")
     .insert(prescriptions);
   if (prescriptionError) throw prescriptionError;
+}
+
+export async function syncDemoPatientDemographicsOnLogin(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("patients")
+    .select("id, first_name, last_name")
+    .eq("owner_id", userId);
+  if (error) throw error;
+
+  const demoMap = new Map(
+    DEMO_PATIENTS.map((patient) => [
+      `${patient.firstName.toLowerCase()}::${patient.lastName.toLowerCase()}`,
+      patient,
+    ]),
+  );
+
+  const updates: Array<PromiseLike<{ error: unknown }>> = [];
+  for (const row of data ?? []) {
+    const firstName = asString(row.first_name);
+    const lastName = asString(row.last_name);
+    const demo = demoMap.get(`${firstName.toLowerCase()}::${lastName.toLowerCase()}`);
+    if (!demo) continue;
+    const patientId = asString(row.id);
+    if (!patientId) continue;
+    updates.push(
+      supabase
+        .from("patients")
+        .update({
+          dob: demo.dob,
+          weight_kg: demo.weightKg,
+        })
+        .eq("id", patientId)
+        .eq("owner_id", userId),
+    );
+  }
+
+  if (!updates.length) return;
+
+  const results = await Promise.all(updates);
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
+}
+
+export async function syncDemoPrescriptionProfilesOnLogin(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .select("id, patient_id, patients!inner(first_name, last_name)")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  const demoNames = new Set(
+    DEMO_PATIENTS.map(
+      (patient) => `${patient.firstName.toLowerCase()}::${patient.lastName.toLowerCase()}`,
+    ),
+  );
+
+  const demoPrescriptions = (data ?? []).filter((row: Record<string, unknown>) => {
+    const patient = asRecord(row.patients);
+    const key = `${asString(patient.first_name).toLowerCase()}::${asString(
+      patient.last_name,
+    ).toLowerCase()}`;
+    return demoNames.has(key);
+  });
+
+  if (!demoPrescriptions.length) return;
+
+  const updates: Array<PromiseLike<{ error: unknown }>> = [];
+  for (const [index, row] of demoPrescriptions.entries()) {
+    const profile = DEMO_MEDICATION_PROFILES[index % DEMO_MEDICATION_PROFILES.length];
+    const prescriptionId = asString(row.id);
+    if (!prescriptionId) continue;
+    updates.push(
+      supabase
+        .from("prescriptions")
+        .update({
+          medication_name: profile.medicationName,
+          indication: profile.indication,
+          route: profile.route,
+          dose_mg_per_kg: profile.doseMgPerKg,
+          frequency_per_day: profile.frequencyPerDay,
+          strength_mg_per_ml: profile.strengthMgPerMl,
+          dispense_volume_ml: profile.dispenseVolumeMl,
+          notes: profile.notes,
+        })
+        .eq("id", prescriptionId)
+        .eq("owner_id", userId),
+    );
+  }
+
+  const results = await Promise.all(updates);
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
 }
 
 export async function getQueueItems(
@@ -513,6 +687,62 @@ export async function getQueueItems(
   });
 }
 
+export async function refreshQueueDueDatesOnLogin(
+  supabase: SupabaseClient,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("compounding_jobs")
+    .select(
+      `
+      id,
+      status,
+      prescriptions!inner (
+        id,
+        created_at
+      )
+    `,
+    )
+    .eq("owner_id", userId);
+
+  if (error) throw error;
+
+  const activeRows = (data ?? [])
+    .filter((row: Record<string, unknown>) => {
+      const status = asString(row.status, "queued");
+      return status !== "approved" && status !== "rejected";
+    })
+    .map((row: Record<string, unknown>) => {
+      const prescription = asRecord(row.prescriptions);
+      return {
+        prescriptionId: asString(prescription.id),
+        createdAt: asString(prescription.created_at),
+      };
+    })
+    .filter((row) => row.prescriptionId.length > 0)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  if (!activeRows.length) return;
+
+  const nowMs = Date.now();
+  const updates = activeRows.map((row, index) => {
+    const dueAt =
+      index < 3
+        ? new Date(nowMs + (index * 15 + 5) * 60 * 1000).toISOString()
+        : new Date(nowMs + (index - 2) * 24 * 60 * 60 * 1000).toISOString();
+
+    return supabase
+      .from("prescriptions")
+      .update({ due_at: dueAt })
+      .eq("id", row.prescriptionId)
+      .eq("owner_id", userId);
+  });
+
+  const results = await Promise.all(updates);
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
+}
+
 export async function getJobContext(
   supabase: SupabaseClient,
   userId: string,
@@ -545,6 +775,7 @@ export async function getJobContext(
           id,
           first_name,
           last_name,
+          dob,
           weight_kg,
           allergies,
           notes
@@ -610,6 +841,7 @@ export async function getJobContext(
     patient: {
       id: asString(patient.id),
       fullName: `${asString(patient.first_name)} ${asString(patient.last_name)}`,
+      dob: patient.dob ? asString(patient.dob) : null,
       weightKg: asNumber(patient.weight_kg, 0),
       allergies: asArray<string>(patient.allergies, []),
       currentMedications,

@@ -33,7 +33,7 @@ export function JobActionPanel({
           disabled={jobStatus === "approved"}
         >
           <span className="material-symbols-outlined text-[20px]">refresh</span>
-          Run Pipeline (max 3 iters)
+          Run Pipeline (max 3 runs)
         </button>
       </form>
 

@@ -92,6 +92,83 @@ function getToast(toast: string | undefined) {
   return { text: toast, tone: "neutral" as const };
 }
 
+function summarizeAuditFailureReason(
+  eventType: string,
+  eventPayload: Record<string, unknown>,
+) {
+  if (
+    eventType !== "pipeline.escalated_to_pharmacist" &&
+    eventType !== "pipeline.preflight_failed"
+  ) {
+    return null;
+  }
+
+  const blockingIssues = Array.isArray(eventPayload.blockingIssues)
+    ? eventPayload.blockingIssues.filter((value): value is string => typeof value === "string")
+    : [];
+  const warnings = Array.isArray(eventPayload.warnings)
+    ? eventPayload.warnings.filter((value): value is string => typeof value === "string")
+    : [];
+
+  const missingSignals = [...blockingIssues, ...warnings].filter((message) =>
+    /(missing|no .*found|no .*available|lookup failed|timed out|no deterministic|no .*match)/i.test(
+      message,
+    ),
+  );
+
+  const lowConfidenceSignals = [...blockingIssues, ...warnings].filter((message) =>
+    /(needs_review|needs review|requires attention|ai review|warn|low confidence)/i.test(
+      message,
+    ),
+  );
+
+  const detailParts: string[] = [];
+  if (missingSignals.length > 0) {
+    detailParts.push(`Missing/Unavailable data: ${missingSignals[0]}`);
+  }
+  if (lowConfidenceSignals.length > 0) {
+    detailParts.push(`Low-confidence signal: ${lowConfidenceSignals[0]}`);
+  }
+  if (detailParts.length > 0) return detailParts.join(" ");
+
+  if (blockingIssues.length > 0) return `Primary blocker: ${blockingIssues[0]}`;
+  if (warnings.length > 0) return `Primary warning: ${warnings[0]}`;
+
+  return null;
+}
+
+function buildReadableCitationHref(params: {
+  jobId: string;
+  source: string;
+  title: string;
+  detail: string;
+  url: string;
+}) {
+  const query = new URLSearchParams({
+    source: params.source,
+    title: params.title,
+    detail: params.detail,
+    url: params.url,
+    backTo: `/dashboard/jobs/${params.jobId}`,
+  });
+  return `/dashboard/references?${query.toString()}`;
+}
+
+function calculateAge(dob: string | null) {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  const hasNotHadBirthdayThisYear =
+    monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate());
+  if (hasNotHadBirthdayThisYear) age -= 1;
+
+  return age >= 0 ? age : null;
+}
+
 export default async function JobDetailsPage({
   params,
   searchParams,
@@ -133,6 +210,7 @@ export default async function JobDetailsPage({
     : { data: null };
 
   const displayName = user.user_metadata.full_name ?? user.email ?? "Pharmacist";
+  const patientAge = calculateAge(context.patient.dob);
 
   return (
     <AppShell userLabel={String(displayName)}>
@@ -187,7 +265,11 @@ export default async function JobDetailsPage({
                   <p className="text-xs text-slate-500 ">MRN: {context.patient.id.slice(0, 6)}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-y-3 text-sm border-t border-slate-100 pt-3">
+              <div className="grid grid-cols-3 gap-y-3 text-sm border-t border-slate-100 pt-3">
+                <div>
+                  <p className="text-slate-500 text-xs mb-0.5">Age</p>
+                  <p className="font-medium text-slate-900 ">{patientAge ?? "--"}</p>
+                </div>
                 <div>
                   <p className="text-slate-500 text-xs mb-0.5">Weight</p>
                   <p className="font-medium text-slate-900 ">{context.patient.weightKg} kg</p>
@@ -296,10 +378,33 @@ export default async function JobDetailsPage({
                 <p className="text-xs font-semibold text-slate-500 mb-3">EXTERNAL CITATIONS</p>
                 <div className="space-y-3">
                   {aiReview.citations.map((citation, i) => (
-                    <a key={i} href={citation.url} target="_blank" rel="noreferrer" className="block p-3 bg-white rounded border border-slate-200 hover:border-blue-300 transition-colors">
-                      <p className="text-sm font-semibold text-[var(--color-primary)]">{citation.title}</p>
-                      <p className="text-xs text-slate-500 mt-1">{citation.detail || citation.source}</p>
-                    </a>
+                    citation.source === "dailymed" ? (
+                      <a
+                        key={i}
+                        href={citation.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block p-3 bg-white rounded border border-slate-200 hover:border-blue-300 transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-[var(--color-primary)]">{citation.title}</p>
+                        <p className="text-xs text-slate-500 mt-1">{citation.detail || citation.source}</p>
+                      </a>
+                    ) : (
+                      <Link
+                        key={i}
+                        href={buildReadableCitationHref({
+                          jobId,
+                          source: citation.source,
+                          title: citation.title,
+                          detail: citation.detail || citation.source,
+                          url: citation.url,
+                        })}
+                        className="block p-3 bg-white rounded border border-slate-200 hover:border-blue-300 transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-[var(--color-primary)]">{citation.title}</p>
+                        <p className="text-xs text-slate-500 mt-1">{citation.detail || citation.source}</p>
+                      </Link>
+                    )
                   ))}
                 </div>
               </div>
@@ -349,13 +454,18 @@ export default async function JobDetailsPage({
             <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
               <div className="relative pl-4 border-l-2 border-slate-200 space-y-6">
                 
-                {audit.length > 0 ? audit.map((event, i) => (
+                {audit.length > 0 ? audit.map((event) => (
                   <div key={event.id} className="relative">
                     <div className="absolute -left-[21px] bg-white border-2 border-[var(--color-primary)] rounded-full p-0.5">
                       <div className="size-2 bg-[var(--color-primary)] rounded-full"></div>
                     </div>
                     <p className="text-xs text-slate-500 mb-0.5">{dateTime.format(new Date(event.createdAt))}</p>
                     <p className="text-sm font-bold text-slate-900 ">{event.eventType}</p>
+                    {summarizeAuditFailureReason(event.eventType, event.eventPayload) ? (
+                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                        {summarizeAuditFailureReason(event.eventType, event.eventPayload)}
+                      </p>
+                    ) : null}
                   </div>
                 )) : (
                   <p className="text-sm text-slate-500 ml-2">No audit events yet.</p>
