@@ -32,7 +32,7 @@ export async function POST(
     const result = await runCompoundingPipeline(supabase, {
       userId: user.id,
       jobId,
-      pharmacistFeedback: feedback || undefined,
+      pharmacistFeedback: feedback.length > 0 ? feedback : null,
     });
 
     const message =

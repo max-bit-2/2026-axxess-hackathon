@@ -5,9 +5,11 @@ import type { JobStatus } from "@/lib/medivance/types";
 export function JobActionPanel({
   jobId,
   jobStatus,
+  pharmacistFeedback,
 }: {
   jobId: string;
   jobStatus: JobStatus;
+  pharmacistFeedback?: string | null;
 }) {
   const approvalEnabled = jobStatus === "verified";
 
@@ -20,12 +22,17 @@ export function JobActionPanel({
 
       <form action={`/api/jobs/${jobId}/run`} method="post" className="space-y-3">
         <label className="block text-sm font-medium text-slate-700 ">
-          Pharmacist context (optional)
+          Pharmacist context
         </label>
+        <p className="text-xs leading-relaxed text-slate-500">
+          Add pharmacist guidance to steer the run away from the default generated formula.
+          Leave this blank to proceed with the generated version.
+        </p>
         <textarea
           className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] resize-none h-20 text-slate-900 placeholder-slate-400"
           name="feedback"
-          placeholder="Example: prioritize lower osmolality..."
+          defaultValue={pharmacistFeedback ?? ""}
+          placeholder="Example: prioritize lower osmolality or substitute a preferred vehicle..."
         />
         <button
           className="flex w-full items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 :bg-slate-700 text-slate-700 font-medium py-2.5 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"

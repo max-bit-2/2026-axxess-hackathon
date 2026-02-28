@@ -150,13 +150,9 @@ export function runPreCompoundingPreflight(params: {
   const isGeneratedFormula = formula.source === "generated";
   if (isGeneratedFormula) {
     warnings.push(
-      "Generated formula detected. Pharmacist rationale is recommended before compounding.",
-    );
-  }
-
-  if (isGeneratedFormula && !hasText(pharmacistFeedback)) {
-    blockingIssues.push(
-      "Generated formulas require pharmacist rationale before deterministic run.",
+      hasText(pharmacistFeedback)
+        ? "Generated formula detected. Pharmacist context will be applied during the run."
+        : "Generated formula detected. No pharmacist context provided, so the default generated version will be used.",
     );
   }
 
@@ -189,13 +185,13 @@ export function runPreCompoundingPreflight(params: {
             : "No direct recipe-allergy conflict found.",
       },
       recipeProvenance: {
-        status: isGeneratedFormula && !hasText(pharmacistFeedback) ? "FAIL" : "PASS",
+        status: "PASS",
         detail:
-          isGeneratedFormula && !hasText(pharmacistFeedback)
-            ? "Generated formula requires pharmacist rationale before run."
-            : isGeneratedFormula
-              ? "Generated formula acknowledged with pharmacist rationale."
-              : "Vetted formula source selected.",
+          isGeneratedFormula
+            ? hasText(pharmacistFeedback)
+              ? "Generated formula will run with pharmacist context."
+              : "Generated formula will run without pharmacist context."
+            : "Vetted formula source selected.",
       },
     },
     blockingIssues,

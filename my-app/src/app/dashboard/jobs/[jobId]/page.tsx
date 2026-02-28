@@ -442,6 +442,7 @@ export default async function JobDetailsPage({
           <JobActionPanel
             jobId={jobId}
             jobStatus={context.job.status}
+            pharmacistFeedback={context.job.pharmacistFeedback}
           />
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-[400px]">

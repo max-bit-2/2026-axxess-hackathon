@@ -145,10 +145,16 @@ export async function runCompoundingPipeline(
   params: {
     userId: string;
     jobId: string;
-    pharmacistFeedback?: string;
+    pharmacistFeedback?: string | null;
   },
 ) {
   const context = await getJobContext(supabase, params.userId, params.jobId);
+  const hasSubmittedFeedback = params.pharmacistFeedback !== undefined;
+  const persistedPharmacistFeedback = hasSubmittedFeedback
+    ? params.pharmacistFeedback ?? null
+    : context.job.pharmacistFeedback;
+  const effectivePharmacistFeedback =
+    typeof persistedPharmacistFeedback === "string" ? persistedPharmacistFeedback : undefined;
 
   if (context.job.status === "approved") {
     throw new Error("Approved jobs are immutable and cannot be reprocessed.");
@@ -170,7 +176,7 @@ export async function runCompoundingPipeline(
   const preCompoundingSummary = runPreCompoundingPreflight({
     context,
     formula,
-    pharmacistFeedback: params.pharmacistFeedback,
+    pharmacistFeedback: effectivePharmacistFeedback,
   });
   if (preCompoundingSummary.blockingIssues.length > 0) {
     return handlePreflightFailure(supabase, {
@@ -186,7 +192,7 @@ export async function runCompoundingPipeline(
     status: "in_progress",
     formulaId: formula.id,
     lastError: null,
-    pharmacistFeedback: params.pharmacistFeedback ?? context.job.pharmacistFeedback,
+    pharmacistFeedback: persistedPharmacistFeedback,
   });
 
   await writeAuditEvent(supabase, {
@@ -197,16 +203,19 @@ export async function runCompoundingPipeline(
       startedAt: nowIso(),
       formulaId: formula.id,
       formulaSource: formula.source,
-      pharmacistFeedback: params.pharmacistFeedback ?? null,
+      pharmacistFeedback: effectivePharmacistFeedback ?? null,
     },
   });
 
-  if (params.pharmacistFeedback) {
+  if (
+    effectivePharmacistFeedback &&
+    effectivePharmacistFeedback !== context.job.pharmacistFeedback
+  ) {
     await insertPharmacistFeedback(supabase, {
       ownerId: params.userId,
       jobId: params.jobId,
       decision: "request_changes",
-      feedback: params.pharmacistFeedback,
+      feedback: effectivePharmacistFeedback,
     });
   }
 
@@ -250,7 +259,7 @@ export async function runCompoundingPipeline(
       patientWeightKg: context.patient.weightKg,
       budRule: formula.budRule,
       ingredients: formula.ingredients,
-      pharmacistFeedback: params.pharmacistFeedback,
+      pharmacistFeedback: effectivePharmacistFeedback,
     });
 
     const hardSummary = runHardChecks({
