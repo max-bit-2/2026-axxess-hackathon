@@ -46,18 +46,10 @@ export function JobActionPanel({
 
       <div className="border-t border-slate-100 pt-4">
         <form action={`/api/jobs/${jobId}/approve`} method="post" className="space-y-3">
-          <label className="block text-sm font-medium text-slate-700 ">Signature Meaning</label>
-          <select
-            className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] text-slate-900"
-            name="signatureMeaning"
-            defaultValue="reviewed_and_approved"
-            disabled={!approvalEnabled}
-            required={approvalEnabled}
-          >
-            <option value="reviewed_and_approved">Reviewed and approved</option>
-            <option value="verified_by">Verified by</option>
-            <option value="compounded_by">Compounded by</option>
-          </select>
+          <p className="text-xs leading-relaxed text-slate-500">
+            This signature records the pharmacist&apos;s review and approval of the compounding
+            record before preparing the medication.
+          </p>
 
           <textarea
             className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] resize-none h-16 text-slate-900 placeholder-slate-400"

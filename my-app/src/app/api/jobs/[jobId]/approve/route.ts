@@ -31,11 +31,6 @@ export async function POST(
   if (!note) {
     return buildRedirect(request, "Approval rationale is required.");
   }
-  const signatureMeaningValue = formData.get("signatureMeaning");
-  const signatureMeaning =
-    typeof signatureMeaningValue === "string"
-      ? signatureMeaningValue
-      : "reviewed_and_approved";
   const signatureAttestation = formData.get("signatureAttestation") === "on";
   const signerName = String(
     user.user_metadata.full_name ?? user.user_metadata.name ?? user.email ?? "",
@@ -49,7 +44,7 @@ export async function POST(
       approverId: user.id,
       signerName,
       signerEmail,
-      signatureMeaning,
+      signatureMeaning: "reviewed_and_approved",
       signatureAttestation,
       note,
     });
