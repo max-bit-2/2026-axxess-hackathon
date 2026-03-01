@@ -419,9 +419,6 @@ export async function approveCompoundingJob(
   },
 ) {
   const note = params.note.trim();
-  if (!note) {
-    throw new Error("Approval rationale is required.");
-  }
 
   const context = await getJobContext(supabase, params.userId, params.jobId);
   if (context.job.status !== "verified") {
@@ -540,7 +537,7 @@ export async function approveCompoundingJob(
       inventoryConsumption,
     },
     report,
-    pharmacistNote: note,
+    pharmacistNote: note || null,
   };
 
   await saveFinalOutput(supabase, {
@@ -563,12 +560,14 @@ export async function approveCompoundingJob(
     lastError: null,
   });
 
-  await insertPharmacistFeedback(supabase, {
-    ownerId: params.userId,
-    jobId: params.jobId,
-    decision: "approve",
-    feedback: note,
-  });
+  if (note) {
+    await insertPharmacistFeedback(supabase, {
+      ownerId: params.userId,
+      jobId: params.jobId,
+      decision: "approve",
+      feedback: note,
+    });
+  }
 
   await writeAuditEvent(supabase, {
     ownerId: params.userId,
@@ -580,7 +579,7 @@ export async function approveCompoundingJob(
       signerEmail,
       signatureMeaning,
       signatureHash,
-      note,
+      note: note || null,
       timestamp: signedAt,
       inventoryConsumptionCount: consumptionItems.length,
     },

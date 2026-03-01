@@ -27,10 +27,6 @@ export async function POST(
   const formData = await request.formData();
   const noteValue = formData.get("note");
   const note = typeof noteValue === "string" ? noteValue.trim() : "";
-
-  if (!note) {
-    return buildRedirect(request, "Approval rationale is required.");
-  }
   const signatureAttestation = formData.get("signatureAttestation") === "on";
   const signerName = String(
     user.user_metadata.full_name ?? user.user_metadata.name ?? user.email ?? "",

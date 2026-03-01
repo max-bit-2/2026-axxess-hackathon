@@ -54,9 +54,8 @@ export function JobActionPanel({
           <textarea
             className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] resize-none h-16 text-slate-900 placeholder-slate-400"
             name="note"
-            placeholder="Approval rationale (required)"
+            placeholder="Approval note (optional)"
             disabled={!approvalEnabled}
-            required={approvalEnabled}
           />
 
           <label className="flex items-start gap-2 text-xs text-slate-600 mt-2 mb-4">
