@@ -31,6 +31,11 @@ function toMg(quantity: number, unit: string) {
   return quantity;
 }
 
+function formatQuantity(quantity: number, unit: string) {
+  const rounded = Math.round(quantity * 1000) / 1000;
+  return `${rounded} ${unit}`;
+}
+
 function getLowStockWarningMultiplier(
   formulaSafety: FormulaSafetyProfile,
   ingredientName: string,
@@ -129,6 +134,7 @@ export function runHardChecks(params: {
   }
 
   let inventoryShortages = 0;
+  const shortageDetails: string[] = [];
   const lowStockIngredients: string[] = [];
   for (const [ingredientName, requirement] of requiredByIngredient.entries()) {
     const lots = inventoryLots.filter(
@@ -137,6 +143,9 @@ export function runHardChecks(params: {
 
     if (!lots.length) {
       inventoryShortages += 1;
+      shortageDetails.push(
+        `${requirement.displayName} missing (need ${formatQuantity(requirement.quantity, requirement.unit)}).`,
+      );
       continue;
     }
 
@@ -152,6 +161,9 @@ export function runHardChecks(params: {
 
       if (totalAvailableMl < requirement.quantity) {
         inventoryShortages += 1;
+        shortageDetails.push(
+          `${requirement.displayName} short (need ${formatQuantity(requirement.quantity, requirement.unit)}, available ${formatQuantity(totalAvailableMl, "mL")}).`,
+        );
       } else if (totalAvailableMl < requirement.quantity * warningThresholdMultiplier) {
         lowStockIngredients.push(requirement.displayName);
       }
@@ -165,13 +177,18 @@ export function runHardChecks(params: {
 
     if (totalAvailableMg < requiredMg) {
       inventoryShortages += 1;
+      shortageDetails.push(
+        `${requirement.displayName} short (need ${formatQuantity(requiredMg, "mg")}, available ${formatQuantity(totalAvailableMg, "mg")}).`,
+      );
     } else if (totalAvailableMg < requiredMg * warningThresholdMultiplier) {
       lowStockIngredients.push(requirement.displayName);
     }
   }
 
   if (inventoryShortages > 0) {
-    blockingIssues.push(`Inventory shortage on ${inventoryShortages} required ingredient(s).`);
+    blockingIssues.push(
+      `Inventory shortage on ${inventoryShortages} required ingredient(s): ${shortageDetails.join(" ")}`,
+    );
   }
   if (lowStockIngredients.length > 0) {
     warnings.push(
@@ -265,7 +282,7 @@ export function runHardChecks(params: {
       inventoryAvailability: {
         status: inventoryShortages ? "FAIL" : "PASS",
         detail: inventoryShortages
-          ? `Inventory short on ${inventoryShortages} ingredient(s).`
+          ? `Inventory short on ${inventoryShortages} ingredient(s): ${shortageDetails.join(" ")}`
           : "Inventory can satisfy calculated requirements.",
       },
       lotExpiry: {

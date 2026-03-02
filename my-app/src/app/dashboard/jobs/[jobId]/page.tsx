@@ -385,7 +385,7 @@ export default async function JobDetailsPage({
                 {latestReport ? (
                   <>
                     &gt; RUN: Pipeline completed.<br/>
-                    &gt; V: {latestReport.version}<br/>
+                    &gt; RUNS: {latestReport.version}<br/>
                     &gt; DOSE: {String(latestValues.singleDoseMg ?? "--")} mg (Daily: {String(latestValues.dailyDoseMg ?? "--")} mg)<br/>
                     &gt; BUD: {String(latestValues.budDateIso ?? "--")}
                   </>

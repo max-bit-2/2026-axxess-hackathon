@@ -101,6 +101,8 @@ describe("safety hard checks", () => {
     });
 
     expect(summary.checks.inventoryAvailability.status).toBe("FAIL");
+    expect(summary.checks.inventoryAvailability.detail).toContain("Omeprazole short");
+    expect(summary.checks.inventoryAvailability.detail).toContain("Vehicle missing");
   });
 
   it("warns when inventory is near shortage threshold", () => {
