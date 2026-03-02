@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "seed:demo-users": "node scripts/seed-demo-users.mjs"
+    "seed:demo-users": "node scripts/seed-demo-users.mjs",
+    "clone:demo-account": "node scripts/clone-demo-account.mjs",
+    "seed:pipeline-demo-cases": "node scripts/seed-pipeline-demo-cases.mjs"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.427",

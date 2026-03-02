@@ -227,6 +227,40 @@ function calculateAge(dob: string | null) {
   return age >= 0 ? age : null;
 }
 
+function extractFormulaIngredients(payload: unknown) {
+  if (!Array.isArray(payload)) return [];
+
+  return payload
+    .map((item) =>
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : {},
+    )
+    .map((item) => {
+      const name = typeof item.name === "string" ? item.name : "Unnamed ingredient";
+      const role = typeof item.role === "string" ? item.role : "ingredient";
+      const quantity =
+        typeof item.requiredAmount === "number"
+          ? item.requiredAmount
+          : typeof item.quantity === "number"
+            ? item.quantity
+            : null;
+      const unit = typeof item.unit === "string" ? item.unit : "";
+
+      if (quantity === null) {
+        return `${name} [${role}]`;
+      }
+
+      return `${name} [${role}] - ${quantity} ${unit}`.trim();
+    });
+}
+
+function extractStringList(payload: unknown) {
+  return Array.isArray(payload)
+    ? payload.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+}
+
 export default async function JobDetailsPage({
   params,
   searchParams,
@@ -262,10 +296,15 @@ export default async function JobDetailsPage({
   const { data: formulaData } = context.job.formulaId
     ? await supabase
         .from("formulas")
-        .select("name, source, instructions")
+        .select("name, source, instructions, ingredient_profile")
         .eq("id", context.job.formulaId)
         .maybeSingle()
     : { data: null };
+  const formulaIngredients = extractFormulaIngredients(
+    formulaData?.ingredient_profile ?? latestValues.ingredients,
+  );
+  const formulaSteps = extractStringList(latestValues.steps);
+  const formulaNotes = extractStringList(latestValues.notes);
 
   const displayName = user.user_metadata.full_name ?? user.email ?? "Pharmacist";
   const patientAge = calculateAge(context.patient.dob);
@@ -363,8 +402,42 @@ export default async function JobDetailsPage({
                 <p className="text-sm font-medium text-slate-900 mb-2">
                   {formatFormulaLabel(formulaData?.name, formulaData?.source)}
                 </p>
-                <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed font-mono">
-                  {formulaData?.instructions ?? "Run pipeline to resolve formula."}
+                <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed font-mono space-y-3">
+                  {formulaIngredients.length > 0 ? (
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-700 mb-1">Ingredients</p>
+                      <div className="space-y-1">
+                        {formulaIngredients.map((ingredient, index) => (
+                          <p key={`${ingredient}-${index}`}>{ingredient}</p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {formulaSteps.length > 0 ? (
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-700 mb-1">Steps</p>
+                      <div className="space-y-1">
+                        {formulaSteps.map((step, index) => (
+                          <p key={`${step}-${index}`}>{index + 1}. {step}</p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-700 mb-1">Instructions</p>
+                      <p>{formulaData?.instructions ?? "Run pipeline to resolve formula."}</p>
+                    </div>
+                  )}
+                  {formulaNotes.length > 0 ? (
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-700 mb-1">Notes</p>
+                      <div className="space-y-1">
+                        {formulaNotes.map((note, index) => (
+                          <p key={`${note}-${index}`}>- {note}</p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
