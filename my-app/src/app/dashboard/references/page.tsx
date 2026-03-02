@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
+import { ExpandableText } from "@/components/expandable-text";
 import { requireUser } from "@/lib/auth";
 import { extractCitationTableData } from "@/lib/medivance/citation-extractor";
 
@@ -82,7 +83,7 @@ export default async function CitationReferencePage({
                     <tr key={row.field} className="border-b last:border-b-0 border-slate-100 align-top">
                       <td className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">{row.field}</td>
                       <td className="px-3 py-2 text-slate-900 whitespace-pre-wrap break-words">
-                        <span>{row.value}</span>
+                        <ExpandableText text={row.value} />
                       </td>
                     </tr>
                   ))}

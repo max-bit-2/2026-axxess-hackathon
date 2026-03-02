@@ -237,8 +237,8 @@ export function runHardChecks(params: {
       doseRange: {
         status: doseRangeStatus ? "PASS" : "FAIL",
         detail: doseRangeStatus
-          ? `Dose within configured bounds (${minSingleDose}-${maxSingleDose} mg single dose).`
-          : "Dose exceeded configured safety range.",
+          ? `Dose within configured bounds: single ${result.singleDoseMg} mg (allowed ${minSingleDose}-${maxSingleDose} mg), daily ${result.dailyDoseMg} mg (max ${maxDailyDose} mg/day).`
+          : `Dose exceeded configured safety range: single ${result.singleDoseMg} mg (allowed ${minSingleDose}-${maxSingleDose} mg), daily ${result.dailyDoseMg} mg (max ${maxDailyDose} mg/day).`,
       },
       allergyCrosscheck: {
         status: allergyMatches.length ? "FAIL" : "PASS",

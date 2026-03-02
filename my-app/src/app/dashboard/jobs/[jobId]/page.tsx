@@ -18,6 +18,64 @@ function formatStatus(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function formatFormulaLabel(name: string | null | undefined, source: string | null | undefined) {
+  const resolvedName = name ?? "Unresolved";
+  if (!source) return resolvedName;
+
+  const formattedSource = formatStatus(source);
+  const normalizedName = resolvedName.toLowerCase();
+  const normalizedSource = formattedSource.toLowerCase();
+
+  if (normalizedName.includes(normalizedSource)) {
+    return resolvedName;
+  }
+
+  return `${resolvedName} (${formattedSource})`;
+}
+
+function normalizeDisplayStatus(status: unknown) {
+  if (status === "PASS" || status === "FAIL" || status === "WARN" || status === "SKIPPED") {
+    return status;
+  }
+  return "WARN";
+}
+
+function getCheckStyles(status: string) {
+  if (status === "PASS") {
+    return {
+      row: "hover:bg-slate-50 :bg-slate-800/30",
+      iconWrap: "bg-green-100 text-green-600 ",
+      icon: "check",
+      badge: "bg-green-100 text-green-700 ",
+    };
+  }
+
+  if (status === "FAIL") {
+    return {
+      row: "bg-red-50/50 border-l-4 border-l-red-500",
+      iconWrap: "bg-red-100 text-red-600 ",
+      icon: "error",
+      badge: "bg-red-100 text-red-700 ",
+    };
+  }
+
+  if (status === "SKIPPED") {
+    return {
+      row: "bg-slate-50/80 border-l-4 border-l-slate-300",
+      iconWrap: "bg-slate-200 text-slate-600 ",
+      icon: "skip_next",
+      badge: "bg-slate-200 text-slate-700 ",
+    };
+  }
+
+  return {
+    row: "bg-amber-50/50 border-l-4 border-l-amber-400",
+    iconWrap: "bg-amber-100 text-amber-600 ",
+    icon: "warning",
+    badge: "bg-amber-100 text-amber-700 ",
+  };
+}
+
 function extractChecks(payload: Record<string, unknown>) {
   const checks = payload.checks;
   if (!checks || typeof checks !== "object" || Array.isArray(checks)) {
@@ -32,7 +90,7 @@ function extractChecks(payload: Record<string, unknown>) {
 
     return {
       key,
-      status: typeof item.status === "string" ? item.status : "WARN",
+      status: normalizeDisplayStatus(item.status),
       detail: typeof item.detail === "string" ? item.detail : "No detail provided.",
     };
   });
@@ -52,7 +110,7 @@ function extractAiReview(payload: Record<string, unknown>) {
 
     return {
       key,
-      status: typeof raw.status === "string" ? raw.status : "WARN",
+      status: normalizeDisplayStatus(raw.status),
       detail: typeof raw.detail === "string" ? raw.detail : "No detail provided.",
     };
   });
@@ -303,7 +361,7 @@ export default async function JobDetailsPage({
               <div className="border-t border-slate-100 pt-3">
                 <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Formula</p>
                 <p className="text-sm font-medium text-slate-900 mb-2">
-                  {formulaData?.name ?? "Unresolved"} {formulaData?.source ? `(${formatStatus(formulaData.source)})` : ""}
+                  {formatFormulaLabel(formulaData?.name, formulaData?.source)}
                 </p>
                 <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed font-mono">
                   {formulaData?.instructions ?? "Run pipeline to resolve formula."}
@@ -349,12 +407,15 @@ export default async function JobDetailsPage({
             <div className="divide-y divide-slate-100 ">
               {hardChecks.length > 0 || aiReview.checks.length > 0 ? (
                 <>
-                  {[...hardChecks, ...aiReview.checks].map((check, i) => (
-                    <div key={i} className={`p-4 flex items-center justify-between transition-colors ${check.status === "PASS" ? "hover:bg-slate-50 :bg-slate-800/30" : check.status === "FAIL" ? "bg-red-50/50 border-l-4 border-l-red-500" : "bg-amber-50/50 border-l-4 border-l-amber-400"}`}>
+                  {[...hardChecks, ...aiReview.checks].map((check, i) => {
+                    const styles = getCheckStyles(check.status);
+
+                    return (
+                    <div key={i} className={`p-4 flex items-center justify-between transition-colors ${styles.row}`}>
                       <div className="flex items-center gap-3">
-                        <div className={`p-1.5 rounded-full ${check.status === "PASS" ? "bg-green-100 text-green-600 " : check.status === "FAIL" ? "bg-red-100 text-red-600 " : "bg-amber-100 text-amber-600 "}`}>
+                        <div className={`p-1.5 rounded-full ${styles.iconWrap}`}>
                           <span className="material-symbols-outlined text-lg">
-                            {check.status === "PASS" ? "check" : check.status === "FAIL" ? "error" : "warning"}
+                            {styles.icon}
                           </span>
                         </div>
                         <div>
@@ -362,11 +423,11 @@ export default async function JobDetailsPage({
                           <p className="text-xs text-slate-500 ">{check.detail}</p>
                         </div>
                       </div>
-                      <span className={`text-xs font-bold px-2 py-1 rounded ${check.status === "PASS" ? "bg-green-100 text-green-700 " : check.status === "FAIL" ? "bg-red-100 text-red-700 " : "bg-amber-100 text-amber-700 "}`}>
+                      <span className={`text-xs font-bold px-2 py-1 rounded ${styles.badge}`}>
                         {check.status}
                       </span>
                     </div>
-                  ))}
+                  )})}
                 </>
               ) : (
                 <div className="p-6 text-center text-sm text-slate-500">Run pipeline to populate checks.</div>

@@ -982,13 +982,13 @@ export async function resolveFormulaForPrescription(
       },
     },
     instructions:
-      "Generated formula pending pharmacist validation. Triturate API and qs with vehicle.",
+      "Provisional formula pending pharmacist validation. Triturate the active ingredient and qs with vehicle.",
     equipment: ["Class A balance", "Mortar and pestle", "Graduated cylinder"],
     quality_control: ["Appearance check", "Final volume check", "Label check"],
     container_closure: "Amber bottle with child-resistant cap.",
     labeling_requirements: "Shake well before use. Store as directed on final label.",
     bud_rationale:
-      "Generated formula defaults to USP <795> aqueous baseline pending pharmacist validation.",
+      "Provisional formula defaults to the USP <795> aqueous baseline pending pharmacist validation.",
     reference_sources: [
       {
         source: "system",

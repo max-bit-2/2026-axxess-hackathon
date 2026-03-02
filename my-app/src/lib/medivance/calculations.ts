@@ -3,7 +3,6 @@ import type {
   CalculationInput,
   CalculationResult,
   Ingredient,
-  WorkingPrescription,
 } from "@/lib/medivance/types";
 
 const MG_PER_G = 1000;
@@ -169,26 +168,4 @@ export function calculateCompoundingReport(input: CalculationInput): Calculation
     steps,
     notes,
   };
-}
-
-export function applyDeterministicCorrections(
-  prescription: WorkingPrescription,
-  issues: string[],
-) {
-  const next = { ...prescription };
-  const joined = issues.join(" ").toLowerCase();
-
-  if (joined.includes("dose")) {
-    next.doseMgPerKg = round(Math.max(next.doseMgPerKg * 0.9, 0.01), 4);
-  }
-
-  if (joined.includes("inventory") || joined.includes("shortage")) {
-    next.dispenseVolumeMl = round(Math.max(next.dispenseVolumeMl * 0.85, 15), 2);
-  }
-
-  if (joined.includes("incompatib")) {
-    next.strengthMgPerMl = round(Math.max(next.strengthMgPerMl * 0.95, 1), 3);
-  }
-
-  return next;
 }

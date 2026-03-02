@@ -3,7 +3,6 @@ import { createHash } from "crypto";
 
 import { env } from "@/lib/env";
 import {
-  applyDeterministicCorrections,
   calculateCompoundingReport,
 } from "@/lib/medivance/calculations";
 import {
@@ -34,8 +33,6 @@ import type {
   MedicationReferenceSnapshot,
   SignatureMeaning,
 } from "@/lib/medivance/types";
-
-const MAX_ITERATIONS = 3;
 
 function toRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -236,7 +233,7 @@ export async function runCompoundingPipeline(
     medicationName: context.prescription.medicationName,
     snapshot: referenceSnapshot,
   });
-  let workingPrescription = {
+  const workingPrescription = {
     medicationName: context.prescription.medicationName,
     route: context.prescription.route,
     doseMgPerKg: context.prescription.doseMgPerKg,
@@ -249,7 +246,7 @@ export async function runCompoundingPipeline(
   let finalIssues: string[] = [];
   let finalWarnings: string[] = [...intakeSummary.warnings, ...preCompoundingSummary.warnings];
   let attempts = 0;
-  const maxIterations = externalBlockingIssues.length > 0 ? 1 : MAX_ITERATIONS;
+  const maxIterations = 1;
 
   for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
     attempts = attempt;
@@ -287,17 +284,17 @@ export async function runCompoundingPipeline(
         })
       : {
           clinicalReasonableness: {
-            status: "WARN",
+            status: "SKIPPED",
             detail:
               "AI review skipped because deterministic hard checks returned blocking issues.",
           },
           preparationCompleteness: {
-            status: "WARN",
+            status: "SKIPPED",
             detail:
               "AI review skipped because deterministic hard checks returned blocking issues.",
           },
           citationQuality: {
-            status: "WARN",
+            status: "SKIPPED",
             detail:
               "AI review skipped because deterministic hard checks returned blocking issues.",
           },
@@ -365,11 +362,6 @@ export async function runCompoundingPipeline(
       finalStatus = "verified";
       break;
     }
-
-    workingPrescription = applyDeterministicCorrections(
-      workingPrescription,
-      blockingIssues.length > 0 ? blockingIssues : warnings,
-    );
   }
 
   if (finalStatus !== "verified") {

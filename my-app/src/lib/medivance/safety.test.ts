@@ -65,6 +65,10 @@ describe("safety hard checks", () => {
 
     expect(summary.checks.doseRange.status).toBe("FAIL");
     expect(summary.blockingIssues.join(" ")).toContain("Dose out of bounds");
+    expect(summary.checks.doseRange.detail).toContain("single 100 mg");
+    expect(summary.checks.doseRange.detail).toContain("allowed 2-30 mg");
+    expect(summary.checks.doseRange.detail).toContain("daily 300 mg");
+    expect(summary.checks.doseRange.detail).toContain("max 90 mg/day");
   });
 
   it("fails on allergy crossmatch", () => {

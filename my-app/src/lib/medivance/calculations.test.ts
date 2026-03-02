@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   alligation,
-  applyDeterministicCorrections,
   assignBud,
   calculateCompoundingReport,
   dilution,
@@ -74,23 +73,5 @@ describe("calculations", () => {
     expect(result.ingredients[0]?.requiredAmount).toBeCloseTo(0.206, 3);
     expect(result.ingredients[1]?.requiredAmount).toBe(100);
     expect(result.steps.length).toBeGreaterThanOrEqual(5);
-  });
-
-  it("applies deterministic correction heuristics", () => {
-    const corrected = applyDeterministicCorrections(
-      {
-        medicationName: "Baclofen",
-        route: "PO",
-        doseMgPerKg: 1,
-        frequencyPerDay: 3,
-        strengthMgPerMl: 10,
-        dispenseVolumeMl: 120,
-      },
-      ["Dose out of bounds", "Inventory shortage", "Known incompatibility detected"],
-    );
-
-    expect(corrected.doseMgPerKg).toBeLessThan(1);
-    expect(corrected.dispenseVolumeMl).toBeLessThan(120);
-    expect(corrected.strengthMgPerMl).toBeLessThan(10);
   });
 });

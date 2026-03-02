@@ -8,7 +8,7 @@ export type JobStatus =
 
 export type FormulaSource = "patient" | "company" | "generated";
 
-export type CheckStatus = "PASS" | "FAIL" | "WARN";
+export type CheckStatus = "PASS" | "FAIL" | "WARN" | "SKIPPED";
 export type ReferenceStatus = "ok" | "missing" | "error";
 export type SignatureMeaning = "reviewed_and_approved" | "compounded_by" | "verified_by";
 
