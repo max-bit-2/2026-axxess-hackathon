@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 
 function buildRedirect(request: Request, jobId: string, toast: string) {
   const requestUrl = new URL(request.url);
-  const redirectUrl = new URL(`/dashboard/jobs/${jobId}`, requestUrl.origin);
+  const redirectUrl = new URL(`/compounding/jobs/${jobId}`, requestUrl.origin);
   redirectUrl.searchParams.set("toast", toast);
   return NextResponse.redirect(redirectUrl);
 }

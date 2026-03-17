@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 
 function buildRedirect(request: Request, toast: string) {
   const requestUrl = new URL(request.url);
-  const redirectUrl = new URL("/dashboard", requestUrl.origin);
+  const redirectUrl = new URL("/compounding", requestUrl.origin);
   redirectUrl.searchParams.set("toast", toast);
   return NextResponse.redirect(redirectUrl);
 }

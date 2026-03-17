@@ -25,17 +25,15 @@ export function AppShell({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      router.push(`/dashboard?q=${encodeURIComponent(searchQuery)}`);
+      router.push(`/compounding?q=${encodeURIComponent(searchQuery)}`);
     } else {
-      router.push("/dashboard");
+      router.push("/compounding");
     }
   };
 
-  const navLinks = [
-    { name: "Dashboard", href: "/dashboard", icon: "dashboard" },
+  const workspaceLinks = [
     { name: "Compounding", href: "/compounding", icon: "science" },
-    { name: "Medications", href: "/medications", icon: "medication" },
-    { name: "Patients", href: "/patients", icon: "person" },
+    { name: "Inventory", href: "/inventory", icon: "inventory_2" },
   ];
 
   const reportLinks = [
@@ -45,12 +43,9 @@ export function AppShell({
 
   // Helper to determine active state
   const isActive = (href: string) => {
-    if (href === "/dashboard") {
-      return pathname === "/dashboard";
-    }
-    // For compounding, consider job details as active too
     if (href === "/compounding") {
-      return pathname.startsWith("/compounding") || pathname.includes("/dashboard/jobs");
+      // For compounding workspace, include job detail pages as active too
+      return pathname === "/compounding" || pathname.startsWith("/compounding/jobs");
     }
     return pathname.startsWith(href);
   };
@@ -73,7 +68,11 @@ export function AppShell({
           </button>
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-          {navLinks.map((link) => (
+          <div className="pt-2 pb-2">
+            <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Workspace</p>
+          </div>
+
+          {workspaceLinks.map((link) => (
             <Link
               key={link.name}
               href={link.href}

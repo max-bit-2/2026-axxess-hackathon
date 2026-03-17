@@ -9,7 +9,7 @@ export default async function SignInPage({
 }) {
   const { user } = await getOptionalUser();
   if (user) {
-    redirect("/dashboard");
+    redirect("/compounding");
   }
 
   const params = await searchParams;

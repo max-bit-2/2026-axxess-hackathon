@@ -207,9 +207,9 @@ function buildReadableCitationHref(params: {
     title: params.title,
     detail: params.detail,
     url: params.url,
-    backTo: `/dashboard/jobs/${params.jobId}`,
+    backTo: `/compounding/jobs/${params.jobId}`,
   });
-  return `/dashboard/references?${query.toString()}`;
+  return `/compounding/references?${query.toString()}`;
 }
 
 function calculateAge(dob: string | null) {
@@ -333,7 +333,7 @@ export default async function JobDetailsPage({
           </p>
         </div>
         <div className="flex gap-3">
-          <Link href="/dashboard" className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 :bg-slate-700 text-sm font-medium transition-colors shadow-sm">
+          <Link href="/compounding" className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 :bg-slate-700 text-sm font-medium transition-colors shadow-sm">
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
             Back to Queue
           </Link>

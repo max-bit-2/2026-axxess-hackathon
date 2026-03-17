@@ -6,7 +6,7 @@ import { LandingPage } from "./landing-page";
 export default async function Home() {
   const { user } = await getOptionalUser();
   if (user) {
-    redirect("/dashboard");
+    redirect("/compounding");
   }
 
   return <LandingPage />;

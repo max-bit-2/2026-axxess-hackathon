@@ -35,7 +35,7 @@ export default async function CitationReferencePage({
   const title = decodeParam(params.title);
   const detail = decodeParam(params.detail);
   const url = decodeParam(params.url);
-  const backTo = decodeParam(params.backTo) || "/dashboard";
+  const backTo = decodeParam(params.backTo) || "/compounding";
 
   const tableData = await extractCitationTableData({ source, url });
   const relevantRows = tableData.rows.filter((row) => row.usedInCalculation);
@@ -47,7 +47,7 @@ export default async function CitationReferencePage({
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-slate-900">Citation Detail</h1>
           <Link
-            href={backTo.startsWith("/") ? backTo : "/dashboard"}
+            href={backTo.startsWith("/") ? backTo : "/compounding"}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50"
           >
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
