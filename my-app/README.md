@@ -3,7 +3,7 @@
 Next.js + Supabase MVP for pharmaceutical compounding workflow:
 
 - Google OAuth sign-in only
-- Compounding queue dashboard
+- Compounding workspace
 - Formula resolution cascade:
   1. Patient-specific formula
   2. Company formula
@@ -70,6 +70,7 @@ Migrations are in `supabase/migrations`:
 - `202602220006_part11_signature_pin_and_intents.sql`
 - `202602220007_remove_signing_intent_challenge.sql`
 - `202602220008_remove_signature_pin_for_demo.sql`
+- `202602220009_inventory_ledger.sql`
 
 Applied tables include:
 
@@ -98,8 +99,8 @@ Immutable tables (`calculation_reports`, `final_outputs`, `audit_events`) are in
 
 - `/` landing
 - `/signin` Google sign-in
-- `/dashboard` compounding queue
-- `/dashboard/jobs/[jobId]` job details + actions
+- `/compounding` compounding queue
+- `/compounding/jobs/[jobId]` job details + actions
 
 POST action routes:
 

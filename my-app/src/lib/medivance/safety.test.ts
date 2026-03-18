@@ -129,7 +129,7 @@ describe("safety hard checks", () => {
       ],
     });
 
-    expect(summary.checks.inventoryAvailability.status).toBe("PASS");
+    expect(summary.checks.inventoryAvailability.status).toBe("WARN");
     expect(summary.warnings.join(" ")).toContain("Inventory is low");
   });
 
@@ -151,6 +151,7 @@ describe("safety hard checks", () => {
           unit: "g",
           expiresOn: "2026-12-31",
           lotNumber: "LOT-1",
+          lowStockThreshold: 200,
         },
         {
           ingredientName: "Vehicle",
@@ -158,12 +159,13 @@ describe("safety hard checks", () => {
           unit: "mL",
           expiresOn: "2026-12-31",
           lotNumber: "LOT-2",
+          lowStockThreshold: 10,
         },
       ],
     });
 
     expect(summary.checks.inventoryAvailability.status).toBe("PASS");
-    expect(summary.warnings.join(" ")).not.toContain("Vehicle");
+    expect(summary.warnings.join(" ")).not.toContain("Inventory is low");
   });
 
   it("fails when lot expiry is earlier than BUD", () => {

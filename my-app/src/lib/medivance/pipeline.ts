@@ -19,6 +19,7 @@ import {
   getLatestReportVersion,
   insertCalculationReport,
   insertPharmacistFeedback,
+  promoteGeneratedFormula,
   resolveFormulaForPrescription,
   saveFinalOutput,
   updateJobState,
@@ -246,7 +247,7 @@ export async function runCompoundingPipeline(
   let finalIssues: string[] = [];
   let finalWarnings: string[] = [...intakeSummary.warnings, ...preCompoundingSummary.warnings];
   let attempts = 0;
-  const maxIterations = 1;
+  const maxIterations = 3;
 
   for (let attempt = 1; attempt <= maxIterations; attempt += 1) {
     attempts = attempt;
@@ -447,7 +448,7 @@ export async function approveCompoundingJob(
     ? await supabase
         .from("formulas")
         .select(
-          "id, name, source, instructions, ingredient_profile, safety_profile, equipment, quality_control, container_closure, labeling_requirements, bud_rationale, reference_sources",
+          "id, name, source, formula_lifecycle_status, instructions, ingredient_profile, safety_profile, equipment, quality_control, container_closure, labeling_requirements, bud_rationale, reference_sources",
         )
         .eq("owner_id", params.userId)
         .eq("id", context.job.formulaId)
@@ -531,6 +532,32 @@ export async function approveCompoundingJob(
     report,
     pharmacistNote: note || null,
   };
+
+  if (
+    formulaData?.source === "generated" &&
+    formulaData.formula_lifecycle_status === "draft"
+  ) {
+    await promoteGeneratedFormula(supabase, {
+      ownerId: params.userId,
+      formulaId: context.job.formulaId,
+      approvedBy: params.approverId,
+      timestampIso: signedAt,
+    });
+
+    await writeAuditEvent(supabase, {
+      ownerId: params.userId,
+      jobId: params.jobId,
+      eventType: "formula.promoted",
+      eventPayload: {
+        formulaId: context.job.formulaId,
+        approvedBy: params.approverId,
+        promotedAt: signedAt,
+        fromStatus: "draft",
+        toStatus: "active",
+        source: formulaData.source,
+      },
+    });
+  }
 
   await saveFinalOutput(supabase, {
     ownerId: params.userId,

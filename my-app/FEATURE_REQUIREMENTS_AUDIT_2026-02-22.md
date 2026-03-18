@@ -11,7 +11,7 @@ Status legend:
 
 | Requirement | Status | Evidence in code | Gap / Risk | Priority |
 |---|---|---|---|---|
-| Queue shows today's jobs by patient/prescription | Implemented | `src/lib/medivance/db.ts` (`getQueueItems`), `/dashboard` UI | None | P1 |
+| Queue shows today's jobs by patient/prescription | Implemented | `src/lib/medivance/db.ts` (`getQueueItems`), `/compounding` UI | None | P1 |
 | Formula resolution hierarchy (patient -> company -> generate) | Implemented | `src/lib/medivance/db.ts` (`resolveFormulaForPrescription`) | Generated path is templated fallback, not literature-driven | P1 |
 | External drug registry lookup (NDC, labeling) | Implemented | `src/lib/medivance/references.ts` + openFDA calls | No FDA 503B facility integration yet | P1 |
 | Deterministic calculation engine (no LLM arithmetic) | Implemented | `src/lib/medivance/calculations.ts` | Advanced compounding math set not complete | P1 |

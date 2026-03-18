@@ -17,6 +17,7 @@ export interface InventoryLotSnapshot {
   unit: IngredientUnit | string;
   expiresOn: string;
   lotNumber: string;
+  lowStockThreshold?: number;
 }
 
 const MG_PER_G = 1000;
@@ -56,6 +57,37 @@ function getLowStockWarningMultiplier(
     return 1.25;
   }
   return configured;
+}
+
+function normalizeLotUnit(unit: string) {
+  const normalized = normalize(unit);
+  if (normalized === "ml") return "mL";
+  return unit;
+}
+
+function convertThresholdToMg(threshold: number, unit: string) {
+  if (unit === "g") return threshold * 1000;
+  if (unit === "mg") return threshold;
+  return threshold;
+}
+
+function resolveInventoryThreshold({
+  formulaSafety,
+  ingredientName,
+  threshold,
+  fallbackAmount,
+  fallbackUnit,
+}: {
+  formulaSafety: FormulaSafetyProfile;
+  ingredientName: string;
+  threshold?: number | null;
+  fallbackAmount: number;
+  fallbackUnit: string;
+}) {
+  if (threshold === undefined || !Number.isFinite(threshold) || threshold < 0) {
+    return fallbackAmount * getLowStockWarningMultiplier(formulaSafety, ingredientName);
+  }
+  return convertThresholdToMg(threshold, normalizeLotUnit(fallbackUnit));
 }
 
 export function runHardChecks(params: {
@@ -149,22 +181,27 @@ export function runHardChecks(params: {
       continue;
     }
 
-    const warningThresholdMultiplier = getLowStockWarningMultiplier(
+    const firstLot = lots[0];
+    const warningThreshold = resolveInventoryThreshold({
       formulaSafety,
-      requirement.displayName,
-    );
+      ingredientName,
+      threshold: firstLot?.lowStockThreshold,
+      fallbackAmount: requirement.unit === "mL" ? requirement.quantity : toMg(requirement.quantity, requirement.unit),
+      fallbackUnit: requirement.unit,
+    });
 
     if (requirement.unit === "mL") {
       const totalAvailableMl = lots
         .filter((lot) => lot.unit === "mL")
         .reduce((sum, lot) => sum + lot.availableQuantity, 0);
+      const remainingAfterJobMl = totalAvailableMl - requirement.quantity;
 
       if (totalAvailableMl < requirement.quantity) {
         inventoryShortages += 1;
         shortageDetails.push(
           `${requirement.displayName} short (need ${formatQuantity(requirement.quantity, requirement.unit)}, available ${formatQuantity(totalAvailableMl, "mL")}).`,
         );
-      } else if (totalAvailableMl < requirement.quantity * warningThresholdMultiplier) {
+      } else if (remainingAfterJobMl < warningThreshold) {
         lowStockIngredients.push(requirement.displayName);
       }
       continue;
@@ -174,13 +211,20 @@ export function runHardChecks(params: {
     const totalAvailableMg = lots.reduce((sum, lot) => {
       return sum + toMg(lot.availableQuantity, lot.unit);
     }, 0);
+    const remainingAfterJobMg = totalAvailableMg - requiredMg;
+    const normalizedThreshold = firstLot?.lowStockThreshold
+      ? convertThresholdToMg(
+          firstLot.lowStockThreshold,
+          normalizeLotUnit(typeof firstLot.unit === "string" ? firstLot.unit : "mg"),
+        )
+      : warningThreshold;
 
     if (totalAvailableMg < requiredMg) {
       inventoryShortages += 1;
       shortageDetails.push(
         `${requirement.displayName} short (need ${formatQuantity(requiredMg, "mg")}, available ${formatQuantity(totalAvailableMg, "mg")}).`,
       );
-    } else if (totalAvailableMg < requiredMg * warningThresholdMultiplier) {
+    } else if (remainingAfterJobMg < normalizedThreshold) {
       lowStockIngredients.push(requirement.displayName);
     }
   }
@@ -280,10 +324,16 @@ export function runHardChecks(params: {
             : `BUD ${result.budDays} days assigned through deterministic rules.`,
       },
       inventoryAvailability: {
-        status: inventoryShortages ? "FAIL" : "PASS",
+        status: inventoryShortages
+          ? "FAIL"
+          : lowStockIngredients.length > 0
+            ? "WARN"
+            : "PASS",
         detail: inventoryShortages
           ? `Inventory short on ${inventoryShortages} ingredient(s): ${shortageDetails.join(" ")}`
-          : "Inventory can satisfy calculated requirements.",
+          : lowStockIngredients.length > 0
+            ? `Inventory can satisfy requirements but will dip below threshold after this job for ${Array.from(new Set(lowStockIngredients)).join(", ")}.`
+            : "Inventory can satisfy calculated requirements.",
       },
       lotExpiry: {
         status: expiryIssues ? "FAIL" : "PASS",

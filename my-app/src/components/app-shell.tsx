@@ -5,6 +5,17 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 
+type InventoryAlertItem = {
+  ingredientName: string;
+  availableQuantity: number;
+  unit: string;
+  lowStockThreshold: number;
+};
+
+function formatNumber(value: number) {
+  return Number(value.toFixed(4));
+}
+
 export function AppShell({
   children,
   userLabel,
@@ -17,10 +28,37 @@ export function AppShell({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
+  const [notificationAlerts, setNotificationAlerts] = useState<InventoryAlertItem[]>([]);
+  const [notificationOpen, setNotificationOpen] = useState(false);
 
   useEffect(() => {
     setSearchQuery(searchParams.get("q") || "");
   }, [searchParams]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function refreshAlerts() {
+      try {
+        const response = await fetch("/api/inventory/alerts", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!isActive) return;
+        if (Array.isArray(payload.alerts)) {
+          setNotificationAlerts(payload.alerts);
+        }
+      } catch {
+        // Keep existing state if network or parsing fails.
+      }
+    }
+
+    refreshAlerts();
+    const interval = window.setInterval(refreshAlerts, 30000);
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,10 +189,47 @@ export function AppShell({
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </form>
-              <button className="relative p-2 text-slate-500 hover:text-[var(--color-primary)] transition-colors rounded-full hover:bg-slate-100 ">
-                <span className="material-symbols-outlined">notifications</span>
-                <span className="absolute top-1.5 right-1.5 size-2 bg-red-500 rounded-full border-2 border-white "></span>
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  className="relative p-2 text-slate-500 hover:text-[var(--color-primary)] transition-colors rounded-full hover:bg-slate-100 "
+                  onClick={() => setNotificationOpen((previous) => !previous)}
+                >
+                  <span className="material-symbols-outlined">notifications</span>
+                  {notificationAlerts.length > 0 ? (
+                    <span className="absolute top-1.5 right-1.5 size-2 bg-red-500 rounded-full border-2 border-white"></span>
+                  ) : null}
+                </button>
+                {notificationOpen ? (
+                  <div className="absolute right-0 top-12 z-30 w-72 bg-white rounded-lg border border-slate-200 shadow-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-sm font-semibold text-slate-700">Inventory Alerts</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {notificationAlerts.length
+                          ? `${notificationAlerts.length} ingredient(s) below threshold`
+                          : "All inventory levels are healthy."}
+                      </p>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {notificationAlerts.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-slate-500">No low-stock alerts at this time.</p>
+                      ) : (
+                        notificationAlerts.map((alert) => (
+                          <div key={alert.ingredientName} className="px-4 py-3 border-b border-slate-100 last:border-0">
+                            <p className="text-sm text-slate-700 font-medium">{alert.ingredientName}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {formatNumber(alert.availableQuantity)} {alert.unit} available
+                              {alert.lowStockThreshold > 0
+                                ? ` · Refill when below ${formatNumber(alert.lowStockThreshold)} ${alert.unit}`
+                                : ""}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <div className="flex items-center gap-3 pl-4 border-l border-slate-200 ">
                 <div className="text-right hidden md:block">
                   <p className="text-sm font-semibold text-slate-900 leading-tight">{userLabel}</p>

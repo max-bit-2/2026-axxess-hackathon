@@ -10,7 +10,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Medivance",
-  description: "AI-assisted pharmaceutical compounding workflow dashboard.",
+  description: "AI-assisted pharmaceutical compounding workflow workspace.",
 };
 
 export default function RootLayout({
